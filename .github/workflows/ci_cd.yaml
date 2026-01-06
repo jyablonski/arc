@@ -1,0 +1,135 @@
+name: arc CI / CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*.*.*" # Trigger on semantic version tags
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  ci_pipeline:
+    name: CI Pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verify dependencies
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run tests
+        run: make test
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building with version: $VERSION"
+
+      - name: Build binary
+        run: make build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Verify binary was created
+        run: |
+          test -f bin/arc
+          ./bin/arc --version
+
+  release:
+    name: Release Pipeline
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Fetch all history for git describe
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Verify dependencies
+        run: |
+          go mod verify
+          go mod tidy
+
+      - name: Run tests
+        run: make test
+
+      - name: Build binary
+        run: make build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Rename binary with version and platform
+        id: binary_name
+        run: |
+          BINARY_NAME="arc-${{ steps.version.outputs.version }}-linux-amd64"
+          mv bin/arc bin/${BINARY_NAME}
+          echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
+          echo "Binary renamed to: ${BINARY_NAME}"
+
+      - name: Verify binary
+        run: |
+          test -f bin/${{ steps.binary_name.outputs.binary_name }}
+          ./bin/${{ steps.binary_name.outputs.binary_name }} --version
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/${{ steps.binary_name.outputs.binary_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Deploy Notification
+    needs: [release]
+    if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack Alert
+        uses: jyablonski/actions/alert@v1
+        with:
+          status: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
