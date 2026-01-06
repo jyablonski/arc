@@ -11,6 +11,10 @@ on:
 env:
   GO_VERSION: "1.25"
 
+# required for creating the release
+permissions:
+  contents: write
+
 jobs:
   ci_pipeline:
     name: CI Pipeline
