@@ -9,7 +9,13 @@ import (
 )
 
 var ghCmd = &cobra.Command{
-	Use:   "gh restart-dashboard",
+	Use:   "gh",
+	Short: "GitHub workflow management",
+	Long:  `Manage GitHub workflows. Use subcommands to perform specific actions.`,
+}
+
+var ghRestartDashboardCmd = &cobra.Command{
+	Use:   "restart-dashboard",
 	Short: "Restart the dashboard GitHub workflow",
 	Long:  `Trigger the vm_cron_restart.yml workflow in the nba_elt_dashboard repository.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -29,4 +35,5 @@ var ghCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(ghCmd)
+	ghCmd.AddCommand(ghRestartDashboardCmd)
 }

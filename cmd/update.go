@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/jyablonski/arc/internal/output"
@@ -29,10 +32,48 @@ and cleaning the package cache with paccache -rv.`,
 			return err
 		}
 
+		// Get kernel packages before update
+		kernelPackagesBefore, err := getKernelPackages()
+		if err != nil {
+			output.Warning(fmt.Sprintf("Failed to get kernel packages before update: %v", err))
+			kernelPackagesBefore = make(map[string]string)
+		}
+
 		// Run pacman update
 		output.Info("Running pacman -Syu...")
 		if err := shell.RunInteractive("sudo", "pacman", "-Syu"); err != nil {
 			return fmt.Errorf("pacman update failed: %w", err)
+		}
+
+		// Check if kernel was updated
+		kernelPackagesAfter, err := getKernelPackages()
+		if err != nil {
+			output.Warning(fmt.Sprintf("Failed to get kernel packages after update: %v", err))
+			kernelPackagesAfter = make(map[string]string)
+		}
+
+		// Check if any kernel package was updated
+		kernelUpdated := false
+		for pkg, versionAfter := range kernelPackagesAfter {
+			if versionBefore, exists := kernelPackagesBefore[pkg]; exists {
+				if versionBefore != versionAfter {
+					kernelUpdated = true
+					output.Warning(fmt.Sprintf("Kernel package %s was updated from %s to %s", pkg, versionBefore, versionAfter))
+					break
+				}
+			} else {
+				// New kernel package installed
+				kernelUpdated = true
+				output.Warning(fmt.Sprintf("New kernel package %s was installed (version %s)", pkg, versionAfter))
+				break
+			}
+		}
+
+		// Prompt for reboot if kernel was updated
+		if kernelUpdated {
+			if err := promptReboot(); err != nil {
+				return err
+			}
 		}
 
 		// Run yay update if not disabled
@@ -77,6 +118,64 @@ var updateUvCmd = &cobra.Command{
 		output.Success("uv updated successfully")
 		return nil
 	},
+}
+
+// getKernelPackages returns a map of kernel package names to their versions
+func getKernelPackages() (map[string]string, error) {
+	output, err := shell.Run("pacman", "-Q")
+	if err != nil {
+		return nil, err
+	}
+
+	kernelPackages := make(map[string]string)
+	kernelPatterns := []string{"linux ", "linux-lts ", "linux-zen ", "linux-hardened ", "linux-headers ", "linux-lts-headers ", "linux-zen-headers ", "linux-hardened-headers "}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		for _, pattern := range kernelPatterns {
+			if strings.HasPrefix(line, pattern) {
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					pkgName := parts[0]
+					version := parts[1]
+					// Only track main kernel packages, not headers
+					if !strings.Contains(pkgName, "-headers") {
+						kernelPackages[pkgName] = version
+					}
+				}
+				break
+			}
+		}
+	}
+
+	return kernelPackages, nil
+}
+
+// promptReboot prompts the user to reboot and executes reboot if confirmed
+func promptReboot() error {
+	output.Warning("A kernel update was successfully installed. A reboot is required for the changes to take effect.")
+	fmt.Print("Reboot now? [Y/n]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read user input: %w", err)
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response == "" || response == "y" || response == "yes" {
+		output.Info("Rebooting now...")
+		if err := shell.RunInteractive("sudo", "reboot"); err != nil {
+			return fmt.Errorf("failed to reboot: %w", err)
+		}
+	} else {
+		output.Info("Reboot skipped. Please reboot manually when convenient.")
+	}
+
+	return nil
 }
 
 func init() {
