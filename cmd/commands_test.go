@@ -21,6 +21,7 @@ var expectedCommands = []string{
 	"installed",
 	"packages",
 	"parts",
+	"self",
 	"setup",
 	"sleep",
 	"update",
@@ -30,6 +31,8 @@ var expectedCommands = []string{
 	"aws whoami",
 	// GH subcommands
 	"gh restart-dashboard",
+	// Self subcommands
+	"self update",
 	// Update subcommands
 	"update uv",
 }

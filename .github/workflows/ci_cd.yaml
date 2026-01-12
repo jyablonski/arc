@@ -97,10 +97,10 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
 
-      - name: Rename binary with version and platform
+      - name: Rename binary with platform
         id: binary_name
         run: |
-          BINARY_NAME="arc-${{ steps.version.outputs.version }}-linux-amd64"
+          BINARY_NAME="arc-linux-amd64"
           mv bin/arc bin/${BINARY_NAME}
           echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
           echo "Binary renamed to: ${BINARY_NAME}"
