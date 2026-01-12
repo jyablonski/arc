@@ -61,10 +61,11 @@ make install
 | `info`      | System information                 | `arc info --json`              |
 | `parts`     | Hardware components                | `arc parts`                    |
 | `installed` | List installed packages            | `arc installed --aur-only`     |
-| `search`    | Search package repos               | `arc search neovim`            |
-| `sleep`     | Suspend system                     | `arc sleep`                    |
-| `validate`  | Check dependencies                 | `arc validate`                 |
-| `setup`     | Install required tools             | `arc setup`                    |
+| `search`     | Search package repos               | `arc search neovim`            |
+| `sleep`      | Suspend system                     | `arc sleep`                    |
+| `validate`   | Check dependencies                 | `arc validate`                 |
+| `setup`      | Install required tools             | `arc setup`                    |
+| `self update`| Update arc to the latest version  | `arc self update`              |
 
 Use `arc <command> --help` for detailed flag information.
 
