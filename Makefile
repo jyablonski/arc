@@ -1,4 +1,4 @@
-.PHONY: build install clean test fmt lint help release
+.PHONY: build install clean test test-ci coverage coverage-html fmt lint help release
 
 # Binary name
 BINARY_NAME=arc
@@ -40,14 +40,37 @@ uninstall: ## Remove arc from ~/.local/bin
 	@rm -f $(INSTALL_DIR)/$(BINARY_NAME)
 	@echo "Uninstalled $(BINARY_NAME)"
 
-clean: ## Remove the built binary
+clean: ## Remove the built binary and coverage files
 	@echo "Cleaning build artifacts..."
 	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
+	@rm -f coverage.out
 	@echo "Clean complete"
 
 test: ## Run tests
 	@echo "Running tests..."
 	go test -v -race ./...
+
+test-ci: ## Run tests with coverage (for CI)
+	@echo "Running tests with coverage..."
+	go test -v -race -coverprofile=coverage.out ./...
+	@echo ""
+	@echo "Coverage by function:"
+	@go tool cover -func=coverage.out | tail -1
+	@echo "Coverage profile saved to coverage.out"
+
+coverage: ## Generate and display test coverage report
+	@echo "Generating coverage profile..."
+	@go test -coverprofile=coverage.out ./...
+	@echo ""
+	@echo "Coverage by function:"
+	@go tool cover -func=coverage.out
+	@echo ""
+	@echo "Coverage profile saved to coverage.out"
+	@echo "Run 'make coverage-html' to view HTML report"
+
+coverage-html: coverage ## Generate and open HTML coverage report
+	@echo "Opening HTML coverage report..."
+	@go tool cover -html=coverage.out
 
 fmt: ## Format Go code
 	@echo "Formatting Go code..."
