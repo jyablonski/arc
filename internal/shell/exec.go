@@ -9,7 +9,13 @@ import (
 )
 
 // Run executes a command and returns its output
+// If a mock runner is set (in tests), it will use the mock instead
 func Run(name string, args ...string) (string, error) {
+	// Check if we have a mock runner set (for testing)
+	if mockRunner != nil && mockRunner.RunFunc != nil {
+		return mockRunner.RunFunc(name, args...)
+	}
+
 	cmd := exec.Command(name, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
