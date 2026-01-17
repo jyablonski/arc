@@ -1,59 +1,32 @@
-name: arc CI / CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [main]
     tags:
-      - "v*.*.*" # Trigger on semantic version tags
+      - "v*.*.*"
   pull_request:
     branches: [main]
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.23"
 
-# required for creating the release
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  ci:
+    name: CI Pipeline
     runs-on: ubuntu-latest
-    outputs:
-      is-release: ${{ steps.check-release.outputs.is-release }}
-      version: ${{ steps.version.outputs.version }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0 # Fetch all history for git describe (needed for releases)
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-
-      - name: Check if this is a release
-        id: check-release
-        run: |
-          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "is-release=true" >> $GITHUB_OUTPUT
-          else
-            echo "is-release=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ steps.check-release.outputs.is-release }}" = "true" ]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          else
-            VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building with version: $VERSION"
 
       - name: Verify dependencies
         run: |
@@ -64,8 +37,6 @@ jobs:
       - name: Run tests with coverage
         run: make test-ci
 
-      # SKIPPED ON RELEASE: Coverage reporting is only sent for PRs and main branch pushes
-      # On tag pushes (releases), we still run tests but don't send coverage to Coveralls
       - name: Send coverage to Coveralls
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         run: |
@@ -76,37 +47,45 @@ jobs:
 
       - name: Build binary
         run: make build
+
+      - name: Verify binary
+        run: ./bin/arc --version
+
+  release:
+    name: Release Pipeline
+    needs: ci
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build release binary
+        run: make build
         env:
           VERSION: ${{ steps.version.outputs.version }}
 
-      # RELEASE-ONLY STEP: Binary is renamed with platform suffix only for releases
-      # Regular builds keep the binary as "arc", releases rename to "arc-linux-amd64"
       - name: Rename binary for release
-        if: steps.check-release.outputs.is-release == 'true'
-        id: binary_name
-        run: |
-          BINARY_NAME="arc-linux-amd64"
-          mv bin/arc bin/${BINARY_NAME}
-          echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
-          echo "Binary renamed to: ${BINARY_NAME}"
+        run: mv bin/arc bin/arc-linux-amd64
 
-      - name: Verify binary
-        run: |
-          if [ "${{ steps.check-release.outputs.is-release }}" = "true" ]; then
-            test -f bin/${{ steps.binary_name.outputs.binary_name }}
-            ./bin/${{ steps.binary_name.outputs.binary_name }} --version
-          else
-            test -f bin/arc
-            ./bin/arc --version
-          fi
-
-      # RELEASE-ONLY STEP: GitHub release is created only when pushing a tag (v*.*.*)
-      # This step is skipped for regular pushes to main and all pull requests
       - name: Create Release
-        if: steps.check-release.outputs.is-release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: bin/${{ steps.binary_name.outputs.binary_name }}
+          files: bin/arc-linux-amd64
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
@@ -115,8 +94,8 @@ jobs:
 
   notify:
     name: Deploy Notification
-    needs: [build-and-release]
-    if: always() && needs.build-and-release.outputs.is-release == 'true'
+    needs: release
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Slack Alert
