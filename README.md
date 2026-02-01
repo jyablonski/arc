@@ -51,6 +51,12 @@ cd arc
 make install
 ```
 
+Starting from version 0.3.0, if you already have `arc` installed, you can update it using:
+
+```bash
+arc self update
+```
+
 ## Commands
 
 | Command     | Description                        | Example                        |
