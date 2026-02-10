@@ -34,6 +34,9 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum || (echo "Dependencies are out of sync. Run 'go mod tidy' and commit the changes." && exit 1)
 
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
       - name: Run tests with coverage
         run: make test-ci
 
