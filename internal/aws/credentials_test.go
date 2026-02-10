@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaskKey(t *testing.T) {
@@ -42,9 +45,7 @@ func TestMaskKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := MaskKey(tt.input)
-			if result != tt.expected {
-				t.Errorf("MaskKey(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -69,47 +70,27 @@ aws_access_key_id = AKIAEXAMPLE456
 `
 
 	err := os.WriteFile(credentialsPath, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test credentials file: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test credentials file")
 
 	profiles, err := ReadCredentials(credentialsPath)
-	if err != nil {
-		t.Fatalf("ReadCredentials() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Check default profile
 	defaultProfile, exists := profiles["default"]
-	if !exists {
-		t.Error("default profile not found")
-	}
-	if defaultProfile["aws_access_key_id"] != "AKIAIOSFODNN7EXAMPLE" {
-		t.Errorf("default aws_access_key_id = %q, want %q", defaultProfile["aws_access_key_id"], "AKIAIOSFODNN7EXAMPLE")
-	}
-	if defaultProfile["aws_secret_access_key"] != "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" {
-		t.Errorf("default aws_secret_access_key mismatch")
-	}
+	require.True(t, exists, "default profile not found")
+	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", defaultProfile["aws_access_key_id"])
+	assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", defaultProfile["aws_secret_access_key"])
 
 	// Check profile1
 	profile1, exists := profiles["profile1"]
-	if !exists {
-		t.Error("profile1 not found")
-	}
-	if profile1["aws_access_key_id"] != "AKIAEXAMPLE123" {
-		t.Errorf("profile1 aws_access_key_id = %q, want %q", profile1["aws_access_key_id"], "AKIAEXAMPLE123")
-	}
-	if profile1["region"] != "us-west-2" {
-		t.Errorf("profile1 region = %q, want %q", profile1["region"], "us-west-2")
-	}
+	require.True(t, exists, "profile1 not found")
+	assert.Equal(t, "AKIAEXAMPLE123", profile1["aws_access_key_id"])
+	assert.Equal(t, "us-west-2", profile1["region"])
 
 	// Check profile2
 	profile2, exists := profiles["profile2"]
-	if !exists {
-		t.Error("profile2 not found")
-	}
-	if profile2["aws_access_key_id"] != "AKIAEXAMPLE456" {
-		t.Errorf("profile2 aws_access_key_id = %q, want %q", profile2["aws_access_key_id"], "AKIAEXAMPLE456")
-	}
+	require.True(t, exists, "profile2 not found")
+	assert.Equal(t, "AKIAEXAMPLE456", profile2["aws_access_key_id"])
 }
 
 func TestWriteCredentials(t *testing.T) {
@@ -128,28 +109,18 @@ func TestWriteCredentials(t *testing.T) {
 	}
 
 	err := WriteCredentials(credentialsPath, profiles)
-	if err != nil {
-		t.Fatalf("WriteCredentials() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Read it back and verify
 	readProfiles, err := ReadCredentials(credentialsPath)
-	if err != nil {
-		t.Fatalf("ReadCredentials() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Check default profile
-	if readProfiles["default"]["aws_access_key_id"] != "AKIAIOSFODNN7EXAMPLE" {
-		t.Errorf("default aws_access_key_id = %q, want %q", readProfiles["default"]["aws_access_key_id"], "AKIAIOSFODNN7EXAMPLE")
-	}
+	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", readProfiles["default"]["aws_access_key_id"])
 
 	// Check profile1
-	if readProfiles["profile1"]["aws_access_key_id"] != "AKIAEXAMPLE123" {
-		t.Errorf("profile1 aws_access_key_id = %q, want %q", readProfiles["profile1"]["aws_access_key_id"], "AKIAEXAMPLE123")
-	}
-	if readProfiles["profile1"]["region"] != "us-west-2" {
-		t.Errorf("profile1 region = %q, want %q", readProfiles["profile1"]["region"], "us-west-2")
-	}
+	assert.Equal(t, "AKIAEXAMPLE123", readProfiles["profile1"]["aws_access_key_id"])
+	assert.Equal(t, "us-west-2", readProfiles["profile1"]["region"])
 }
 
 func TestBackupCredentials(t *testing.T) {
@@ -159,35 +130,23 @@ func TestBackupCredentials(t *testing.T) {
 
 	// Create original file
 	err := os.WriteFile(credentialsPath, []byte(backupContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test credentials file: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test credentials file")
 
 	// Create backup
 	backupPath, err := BackupCredentials(credentialsPath)
-	if err != nil {
-		t.Fatalf("BackupCredentials() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify backup file exists
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		t.Errorf("Backup file does not exist: %s", backupPath)
-	}
+	_, err = os.Stat(backupPath)
+	assert.False(t, os.IsNotExist(err), "Backup file should exist: %s", backupPath)
 
 	// Verify backup content matches original
 	backupData, err := os.ReadFile(backupPath)
-	if err != nil {
-		t.Fatalf("Failed to read backup file: %v", err)
-	}
-
-	if string(backupData) != backupContent {
-		t.Errorf("Backup content = %q, want %q", string(backupData), backupContent)
-	}
+	require.NoError(t, err, "Failed to read backup file")
+	assert.Equal(t, backupContent, string(backupData))
 
 	// Verify backup filename has .bak extension
-	if filepath.Ext(backupPath) != ".bak" {
-		t.Errorf("Backup file should have .bak extension, got: %s", backupPath)
-	}
+	assert.Equal(t, ".bak", filepath.Ext(backupPath))
 }
 
 func TestReadCredentialsEmptyFile(t *testing.T) {
@@ -196,18 +155,11 @@ func TestReadCredentialsEmptyFile(t *testing.T) {
 
 	// Create empty file
 	err := os.WriteFile(credentialsPath, []byte(""), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test credentials file: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test credentials file")
 
 	profiles, err := ReadCredentials(credentialsPath)
-	if err != nil {
-		t.Fatalf("ReadCredentials() error = %v", err)
-	}
-
-	if len(profiles) != 0 {
-		t.Errorf("Expected empty profiles map, got %d profiles", len(profiles))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, profiles)
 }
 
 func TestReadCredentialsWithComments(t *testing.T) {
@@ -222,16 +174,9 @@ aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 `
 
 	err := os.WriteFile(credentialsPath, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test credentials file: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test credentials file")
 
 	profiles, err := ReadCredentials(credentialsPath)
-	if err != nil {
-		t.Fatalf("ReadCredentials() error = %v", err)
-	}
-
-	if profiles["default"]["aws_access_key_id"] != "AKIAIOSFODNN7EXAMPLE" {
-		t.Errorf("Failed to parse credentials with comments")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", profiles["default"]["aws_access_key_id"])
 }

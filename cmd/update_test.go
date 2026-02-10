@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/jyablonski/arc/internal/shell"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetKernelPackages(t *testing.T) {
@@ -85,21 +87,15 @@ linux-lts-headers 5.15.0-1`,
 
 			packages, err := getKernelPackages()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("getKernelPackages() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				require.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(packages) != len(tt.expectedPkgs) {
-					t.Errorf("getKernelPackages() returned %d packages, want %d", len(packages), len(tt.expectedPkgs))
-					return
-				}
-				for pkg, version := range tt.expectedPkgs {
-					if packages[pkg] != version {
-						t.Errorf("getKernelPackages() package %s = %q, want %q", pkg, packages[pkg], version)
-					}
-				}
+			require.NoError(t, err)
+			assert.Len(t, packages, len(tt.expectedPkgs))
+			for pkg, version := range tt.expectedPkgs {
+				assert.Equal(t, version, packages[pkg], "package %s version mismatch", pkg)
 			}
 		})
 	}
@@ -110,49 +106,41 @@ func TestPromptReboot(t *testing.T) {
 		name         string
 		input        string
 		shouldReboot bool
-		wantErr      bool
 	}{
 		{
 			name:         "yes response",
 			input:        "y\n",
 			shouldReboot: true,
-			wantErr:      false,
 		},
 		{
 			name:         "yes uppercase",
 			input:        "Y\n",
 			shouldReboot: true,
-			wantErr:      false,
 		},
 		{
 			name:         "yes full word",
 			input:        "yes\n",
 			shouldReboot: true,
-			wantErr:      false,
 		},
 		{
 			name:         "empty response (default yes)",
 			input:        "\n",
 			shouldReboot: true,
-			wantErr:      false,
 		},
 		{
 			name:         "no response",
 			input:        "n\n",
 			shouldReboot: false,
-			wantErr:      false,
 		},
 		{
 			name:         "no uppercase",
 			input:        "N\n",
 			shouldReboot: false,
-			wantErr:      false,
 		},
 		{
 			name:         "other response",
 			input:        "maybe\n",
 			shouldReboot: false,
-			wantErr:      false,
 		},
 	}
 
@@ -162,9 +150,7 @@ func TestPromptReboot(t *testing.T) {
 			response := strings.TrimSpace(strings.ToLower(tt.input))
 			shouldReboot := response == "" || response == "y" || response == "yes"
 
-			if shouldReboot != tt.shouldReboot {
-				t.Errorf("promptReboot() shouldReboot = %v, want %v", shouldReboot, tt.shouldReboot)
-			}
+			assert.Equal(t, tt.shouldReboot, shouldReboot)
 		})
 	}
 }
@@ -222,9 +208,7 @@ func TestPromptRebootParsing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			response := strings.TrimSpace(strings.ToLower(tt.input))
 			result := response == "" || response == "y" || response == "yes"
-			if result != tt.expected {
-				t.Errorf("promptReboot parsing: input %q = %v, want %v", tt.input, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

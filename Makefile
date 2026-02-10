@@ -48,7 +48,7 @@ clean: ## Remove the built binary and coverage files
 
 test: ## Run tests with gotestsum (install: go install gotest.tools/gotestsum@latest)
 	@echo "Running tests..."
-	@command -v gotestsum >/dev/null 2>&1 && gotestsum --format testdox -- -race ./... || go test -v -race ./...
+	gotestsum --format testdox -- -race ./...
 
 test-ci: ## Run tests with coverage and JUnit output (for CI)
 	@echo "Running tests with coverage..."

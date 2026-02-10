@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetCredentialsPath(t *testing.T) {
@@ -18,36 +21,19 @@ func TestGetCredentialsPath(t *testing.T) {
 
 	// Test the function
 	path, err := GetCredentialsPath()
-	if err != nil {
-		t.Fatalf("GetCredentialsPath() error = %v", err)
-	}
-
-	if path != expectedPath {
-		t.Errorf("GetCredentialsPath() = %q, want %q", path, expectedPath)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, expectedPath, path)
 }
 
 func TestGetCredentialsPath_ErrorHandling(t *testing.T) {
 	// This test verifies the function handles errors correctly
-	// We can't easily mock user.Current() without refactoring,
-	// but we can verify the function returns an error when appropriate
-	// For now, we'll just verify it works with the real user
-
-	// If we can't get the current user, the function should error
-	// But in practice, this should always work, so we'll just test the happy path
 	path, err := GetCredentialsPath()
-	if err != nil {
-		t.Fatalf("GetCredentialsPath() unexpected error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify the path format is correct
-	if path == "" {
-		t.Error("GetCredentialsPath() returned empty path")
-	}
+	assert.NotEmpty(t, path)
 
 	// Verify it ends with .aws/credentials
 	expectedSuffix := filepath.Join(".aws", "credentials")
-	if !strings.HasSuffix(path, expectedSuffix) {
-		t.Errorf("GetCredentialsPath() path %q does not end with %q", path, expectedSuffix)
-	}
+	assert.True(t, strings.HasSuffix(path, expectedSuffix), "path %q should end with %q", path, expectedSuffix)
 }

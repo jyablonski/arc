@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/jyablonski/arc/internal/shell"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetPackageCount(t *testing.T) {
@@ -48,7 +50,6 @@ func TestGetPackageCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Q" {
@@ -62,14 +63,13 @@ func TestGetPackageCount(t *testing.T) {
 
 			count, err := GetPackageCount()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetPackageCount() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError && count != tt.expectedCount {
-				t.Errorf("GetPackageCount() = %d, want %d", count, tt.expectedCount)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCount, count)
 		})
 	}
 }
@@ -107,7 +107,6 @@ func TestGetExplicitlyInstalledCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qe" {
@@ -121,14 +120,13 @@ func TestGetExplicitlyInstalledCount(t *testing.T) {
 
 			count, err := GetExplicitlyInstalledCount()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetExplicitlyInstalledCount() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError && count != tt.expectedCount {
-				t.Errorf("GetExplicitlyInstalledCount() = %d, want %d", count, tt.expectedCount)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCount, count)
 		})
 	}
 }
@@ -166,7 +164,6 @@ func TestGetForeignPackageCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qm" {
@@ -180,14 +177,13 @@ func TestGetForeignPackageCount(t *testing.T) {
 
 			count, err := GetForeignPackageCount()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetForeignPackageCount() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError && count != tt.expectedCount {
-				t.Errorf("GetForeignPackageCount() = %d, want %d", count, tt.expectedCount)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCount, count)
 		})
 	}
 }
@@ -225,7 +221,6 @@ func TestGetExplicitlyInstalled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qe" {
@@ -239,22 +234,13 @@ func TestGetExplicitlyInstalled(t *testing.T) {
 
 			pkgs, err := GetExplicitlyInstalled()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetExplicitlyInstalled() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(pkgs) != len(tt.expectedPkgs) {
-					t.Errorf("GetExplicitlyInstalled() returned %d packages, want %d", len(pkgs), len(tt.expectedPkgs))
-					return
-				}
-				for i, pkg := range pkgs {
-					if pkg != tt.expectedPkgs[i] {
-						t.Errorf("GetExplicitlyInstalled()[%d] = %q, want %q", i, pkg, tt.expectedPkgs[i])
-					}
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPkgs, pkgs)
 		})
 	}
 }
@@ -292,7 +278,6 @@ func TestGetForeignPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qm" {
@@ -306,22 +291,13 @@ func TestGetForeignPackages(t *testing.T) {
 
 			pkgs, err := GetForeignPackages()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetForeignPackages() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(pkgs) != len(tt.expectedPkgs) {
-					t.Errorf("GetForeignPackages() returned %d packages, want %d", len(pkgs), len(tt.expectedPkgs))
-					return
-				}
-				for i, pkg := range pkgs {
-					if pkg != tt.expectedPkgs[i] {
-						t.Errorf("GetForeignPackages()[%d] = %q, want %q", i, pkg, tt.expectedPkgs[i])
-					}
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPkgs, pkgs)
 		})
 	}
 }
@@ -385,7 +361,6 @@ Installed Size  : 1.0 GiB
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qi" {
@@ -399,21 +374,13 @@ Installed Size  : 1.0 GiB
 
 			size, err := GetTotalInstalledSize()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetTotalInstalledSize() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				// Allow small floating point differences
-				diff := size - tt.expectedSize
-				if diff < 0 {
-					diff = -diff
-				}
-				if diff > 0.001 {
-					t.Errorf("GetTotalInstalledSize() = %f GiB, want %f GiB", size, tt.expectedSize)
-				}
-			}
+			require.NoError(t, err)
+			assert.InDelta(t, tt.expectedSize, size, 0.001)
 		})
 	}
 }
@@ -458,7 +425,6 @@ func TestGetOrphanedPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qdt" {
@@ -472,22 +438,13 @@ func TestGetOrphanedPackages(t *testing.T) {
 
 			pkgs, err := GetOrphanedPackages()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetOrphanedPackages() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(pkgs) != len(tt.expectedPkgs) {
-					t.Errorf("GetOrphanedPackages() returned %d packages, want %d", len(pkgs), len(tt.expectedPkgs))
-					return
-				}
-				for i, pkg := range pkgs {
-					if pkg != tt.expectedPkgs[i] {
-						t.Errorf("GetOrphanedPackages()[%d] = %q, want %q", i, pkg, tt.expectedPkgs[i])
-					}
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPkgs, pkgs)
 		})
 	}
 }
@@ -529,7 +486,6 @@ func TestSearchPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 2 && args[0] == "-Ss" && args[1] == tt.query {
@@ -543,22 +499,13 @@ func TestSearchPackages(t *testing.T) {
 
 			pkgs, err := SearchPackages(tt.query)
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("SearchPackages() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(pkgs) != len(tt.expectedPkgs) {
-					t.Errorf("SearchPackages() returned %d packages, want %d", len(pkgs), len(tt.expectedPkgs))
-					return
-				}
-				for i, pkg := range pkgs {
-					if pkg != tt.expectedPkgs[i] {
-						t.Errorf("SearchPackages()[%d] = %q, want %q", i, pkg, tt.expectedPkgs[i])
-					}
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPkgs, pkgs)
 		})
 	}
 }
@@ -603,7 +550,6 @@ func TestGetCacheSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "du" && len(args) == 2 && args[0] == "-sh" && args[1] == "/var/cache/pacman/pkg" {
@@ -617,14 +563,13 @@ func TestGetCacheSize(t *testing.T) {
 
 			size, err := GetCacheSize()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetCacheSize() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError && size != tt.expectedSize {
-				t.Errorf("GetCacheSize() = %q, want %q", size, tt.expectedSize)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedSize, size)
 		})
 	}
 }
@@ -685,7 +630,6 @@ func TestGetRecentlyInstalledCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "grep" && len(args) >= 3 && args[0] == "-E" && args[1] == `\[ALPM\] installed` {
@@ -699,14 +643,13 @@ func TestGetRecentlyInstalledCount(t *testing.T) {
 
 			count, err := GetRecentlyInstalledCount(tt.days)
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetRecentlyInstalledCount() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError && count != tt.expectedCount {
-				t.Errorf("GetRecentlyInstalledCount() = %d, want %d", count, tt.expectedCount)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCount, count)
 		})
 	}
 }
@@ -758,7 +701,6 @@ Installed Size  : 512.00 MiB`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
 			mock := &shell.MockRunner{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qi" {
@@ -772,21 +714,17 @@ Installed Size  : 512.00 MiB`,
 
 			pkgs, err := GetLargestPackages(tt.topN)
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetLargestPackages() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(pkgs) != tt.expectedCount {
-					t.Errorf("GetLargestPackages() returned %d packages, want %d", len(pkgs), tt.expectedCount)
-				}
-				// Verify packages are sorted by size (descending)
-				for i := 1; i < len(pkgs); i++ {
-					if pkgs[i-1].InstalledSize < pkgs[i].InstalledSize {
-						t.Errorf("GetLargestPackages() packages not sorted correctly")
-					}
-				}
+			require.NoError(t, err)
+			assert.Len(t, pkgs, tt.expectedCount)
+
+			// Verify packages are sorted by size (descending)
+			for i := 1; i < len(pkgs); i++ {
+				assert.GreaterOrEqual(t, pkgs[i-1].InstalledSize, pkgs[i].InstalledSize, "packages should be sorted by size descending")
 			}
 		})
 	}

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/jyablonski/arc/internal/shell"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetCurrentIdentity(t *testing.T) {
@@ -56,21 +58,18 @@ func TestGetCurrentIdentity(t *testing.T) {
 
 			identity, err := GetCurrentIdentity()
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("GetCurrentIdentity() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if identity == nil {
-					t.Fatal("GetCurrentIdentity() returned nil identity")
-				}
-				if tt.expectedARN != "" {
-					arn, ok := identity["Arn"].(string)
-					if !ok || arn != tt.expectedARN {
-						t.Errorf("GetCurrentIdentity() Arn = %v, want %q", identity["Arn"], tt.expectedARN)
-					}
-				}
+			require.NoError(t, err)
+			require.NotNil(t, identity)
+
+			if tt.expectedARN != "" {
+				arn, ok := identity["Arn"].(string)
+				assert.True(t, ok)
+				assert.Equal(t, tt.expectedARN, arn)
 			}
 		})
 	}
@@ -146,22 +145,13 @@ func TestListAccessKeys(t *testing.T) {
 
 			keys, err := ListAccessKeys(tt.username)
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("ListAccessKeys() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if len(keys) != len(tt.expectedKeys) {
-					t.Errorf("ListAccessKeys() returned %d keys, want %d", len(keys), len(tt.expectedKeys))
-					return
-				}
-				for i, key := range keys {
-					if key != tt.expectedKeys[i] {
-						t.Errorf("ListAccessKeys()[%d] = %q, want %q", i, key, tt.expectedKeys[i])
-					}
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedKeys, keys)
 		})
 	}
 }
@@ -222,19 +212,14 @@ func TestCreateAccessKey(t *testing.T) {
 
 			keyID, secretKey, err := CreateAccessKey(tt.username)
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("CreateAccessKey() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.expectedError {
-				if keyID != tt.expectedKeyID {
-					t.Errorf("CreateAccessKey() keyID = %q, want %q", keyID, tt.expectedKeyID)
-				}
-				if secretKey == "" {
-					t.Error("CreateAccessKey() secretKey is empty")
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedKeyID, keyID)
+			assert.NotEmpty(t, secretKey)
 		})
 	}
 }
@@ -279,8 +264,10 @@ func TestDeleteAccessKey(t *testing.T) {
 
 			err := DeleteAccessKey(tt.username, tt.keyID)
 
-			if (err != nil) != tt.expectedError {
-				t.Errorf("DeleteAccessKey() error = %v, wantErr %v", err, tt.expectedError)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

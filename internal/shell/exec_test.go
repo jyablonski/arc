@@ -2,6 +2,9 @@ package shell
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommandExists(t *testing.T) {
@@ -30,9 +33,7 @@ func TestCommandExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := CommandExists(tt.command)
-			if result != tt.expected {
-				t.Errorf("CommandExists(%q) = %v, want %v", tt.command, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -73,15 +74,15 @@ func TestRun(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output, err := Run(tt.command, tt.args...)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Run(%q, %v) error = %v, wantErr %v", tt.command, tt.args, err, tt.wantErr)
+
+			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
-			if !tt.wantErr && output == "" && tt.command != "true" {
-				// echo should produce output
-				if tt.command == "echo" && output != "hello" {
-					t.Errorf("Run(%q, %v) = %q, want %q", tt.command, tt.args, output, "hello")
-				}
+
+			require.NoError(t, err)
+			if tt.command == "echo" {
+				assert.Contains(t, output, "hello")
 			}
 		})
 	}
@@ -89,23 +90,13 @@ func TestRun(t *testing.T) {
 
 func TestRunWithOutput(t *testing.T) {
 	output, err := Run("echo", "test", "output")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	expected := "test output"
-	if output != expected {
-		t.Errorf("Run() = %q, want %q", output, expected)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "test output", output)
 }
 
 func TestRunWithWhitespace(t *testing.T) {
 	output, err := Run("echo", "  hello  ")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	require.NoError(t, err)
 	// TrimSpace removes leading/trailing whitespace from output
-	// echo prints the argument, but TrimSpace will trim it
-	if output != "hello" {
-		t.Errorf("Run() = %q, want %q", output, "hello")
-	}
+	assert.Equal(t, "hello", output)
 }

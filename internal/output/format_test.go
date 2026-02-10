@@ -3,130 +3,91 @@ package output
 import (
 	"bytes"
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHeader(t *testing.T) {
-	// Test that Header doesn't panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Header() panicked: %v", r)
-		}
-	}()
-	Header("Test Header")
+	assert.NotPanics(t, func() {
+		Header("Test Header")
+	})
 }
 
 func TestSuccess(t *testing.T) {
-	// Test that Success doesn't panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Success() panicked: %v", r)
-		}
-	}()
-	Success("Test success")
+	assert.NotPanics(t, func() {
+		Success("Test success")
+	})
 }
 
 func TestError(t *testing.T) {
-	// Test that Error doesn't panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Error() panicked: %v", r)
-		}
-	}()
-	Error("Test error")
+	assert.NotPanics(t, func() {
+		Error("Test error")
+	})
 }
 
 func TestInfo(t *testing.T) {
-	// Test that Info doesn't panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Info() panicked: %v", r)
-		}
-	}()
-	Info("Test info")
+	assert.NotPanics(t, func() {
+		Info("Test info")
+	})
 }
 
 func TestWarning(t *testing.T) {
-	// Test that Warning doesn't panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Warning() panicked: %v", r)
-		}
-	}()
-	Warning("Test warning")
+	assert.NotPanics(t, func() {
+		Warning("Test warning")
+	})
 }
 
 func TestPrint(t *testing.T) {
-	// Capture output
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	output := captureStdout(t, func() {
+		Print("Test print")
+	})
 
-	Print("Test print")
-
-	w.Close()
-	os.Stdout = oldStdout
-	buf.ReadFrom(r)
-	output := buf.String()
-
-	if !strings.Contains(output, "Test print") {
-		t.Errorf("Print() output should contain message, got: %q", output)
-	}
+	assert.Contains(t, output, "Test print")
 }
 
 func TestTable(t *testing.T) {
-	// Capture output
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
 	headers := []string{"Name", "Size"}
 	rows := [][]string{
 		{"package1", "100 MiB"},
 		{"package2", "200 MiB"},
 	}
-	Table(headers, rows)
 
-	w.Close()
-	os.Stdout = oldStdout
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := captureStdout(t, func() {
+		Table(headers, rows)
+	})
 
-	if !strings.Contains(output, "Name") {
-		t.Errorf("Table() output should contain header 'Name', got: %q", output)
-	}
-	if !strings.Contains(output, "Size") {
-		t.Errorf("Table() output should contain header 'Size', got: %q", output)
-	}
-	if !strings.Contains(output, "package1") {
-		t.Errorf("Table() output should contain 'package1', got: %q", output)
-	}
-	if !strings.Contains(output, "package2") {
-		t.Errorf("Table() output should contain 'package2', got: %q", output)
-	}
+	assert.Contains(t, output, "Name")
+	assert.Contains(t, output, "Size")
+	assert.Contains(t, output, "package1")
+	assert.Contains(t, output, "package2")
 }
 
 func TestPrintKeyValue(t *testing.T) {
-	// Capture output
+	output := captureStdout(t, func() {
+		PrintKeyValue("Key", "Value")
+	})
+
+	assert.Contains(t, output, "Key")
+	assert.Contains(t, output, "Value")
+}
+
+// captureStdout is a test helper that captures stdout during fn execution
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
 	var buf bytes.Buffer
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
 	os.Stdout = w
 
-	PrintKeyValue("Key", "Value")
+	fn()
 
 	w.Close()
 	os.Stdout = oldStdout
 	buf.ReadFrom(r)
-	output := buf.String()
 
-	if !strings.Contains(output, "Key") {
-		t.Errorf("PrintKeyValue() output should contain key, got: %q", output)
-	}
-	if !strings.Contains(output, "Value") {
-		t.Errorf("PrintKeyValue() output should contain value, got: %q", output)
-	}
+	return buf.String()
 }

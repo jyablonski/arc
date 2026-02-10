@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecute(t *testing.T) {
@@ -12,33 +15,19 @@ func TestExecute(t *testing.T) {
 }
 
 func TestRootCmdInitialization(t *testing.T) {
-	// Test that rootCmd is properly initialized
-	if rootCmd == nil {
-		t.Fatal("rootCmd is nil")
-	}
+	require.NotNil(t, rootCmd, "rootCmd should be initialized")
 
-	if rootCmd.Use != "arc" {
-		t.Errorf("rootCmd.Use = %q, want %q", rootCmd.Use, "arc")
-	}
-
-	if rootCmd.Short == "" {
-		t.Error("rootCmd.Short is empty")
-	}
-
-	if rootCmd.Long == "" {
-		t.Error("rootCmd.Long is empty")
-	}
+	assert.Equal(t, "arc", rootCmd.Use)
+	assert.NotEmpty(t, rootCmd.Short, "rootCmd.Short should not be empty")
+	assert.NotEmpty(t, rootCmd.Long, "rootCmd.Long should not be empty")
 }
 
 func TestRootCmdVersion(t *testing.T) {
-	// Test that version is set (defaults to "dev" if not set at build time)
-	if version == "" {
-		t.Error("version is empty")
-	}
+	require.NotEmpty(t, version, "version should be set")
 
 	// Version should be "dev" by default or a semantic version
-	if version != "dev" && !isValidVersion(version) {
-		t.Errorf("version %q is not a valid version format", version)
+	if version != "dev" {
+		assert.True(t, isValidVersion(version), "version %q should be valid format", version)
 	}
 }
 
