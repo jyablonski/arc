@@ -2,6 +2,8 @@ package aws
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetUsername(t *testing.T) {
@@ -58,13 +60,14 @@ func TestGetUsername(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := GetUsername(tt.arn)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetUsername() error = %v, wantErr %v", err, tt.wantErr)
+
+			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
-			if !tt.wantErr && result != tt.expected {
-				t.Errorf("GetUsername() = %q, want %q", result, tt.expected)
-			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

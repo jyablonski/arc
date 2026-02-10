@@ -3,6 +3,9 @@ package shell
 import (
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetMockRunner(t *testing.T) {
@@ -18,12 +21,8 @@ func TestSetMockRunner(t *testing.T) {
 
 	// Verify mock is set by calling Run with mock
 	result, err := Run("test", "arg")
-	if err != nil {
-		t.Fatalf("Run() with mock error = %v", err)
-	}
-	if result != "mocked" {
-		t.Errorf("Run() with mock = %q, want %q", result, "mocked")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "mocked", result)
 }
 
 func TestClearMockRunner(t *testing.T) {
@@ -38,12 +37,8 @@ func TestClearMockRunner(t *testing.T) {
 	// Clear it
 	ClearMockRunner()
 
-	// Verify mock is cleared - Run should fail with real command (or succeed if command exists)
-	// We can't easily test this without knowing what commands exist, but we can verify
-	// that ClearMockRunner doesn't panic
-	if mockRunner != nil {
-		t.Error("ClearMockRunner() did not clear mockRunner")
-	}
+	// Verify mock is cleared
+	assert.Nil(t, mockRunner, "ClearMockRunner() should clear mockRunner")
 }
 
 func TestMockRunnerIntegration(t *testing.T) {
@@ -88,14 +83,13 @@ func TestMockRunnerIntegration(t *testing.T) {
 
 			result, err := Run(tt.command, tt.args...)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Run() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
 				return
 			}
 
-			if !tt.wantErr && result != tt.expected {
-				t.Errorf("Run() = %q, want %q", result, tt.expected)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

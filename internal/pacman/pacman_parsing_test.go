@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Test helper functions that parse pacman output
@@ -58,9 +60,7 @@ func TestParsePackageListOutput(t *testing.T) {
 				}
 			}
 
-			if len(nonEmptyLines) != tt.expected {
-				t.Errorf("parsePackageList() = %d, want %d", len(nonEmptyLines), tt.expected)
-			}
+			assert.Len(t, nonEmptyLines, tt.expected)
 		})
 	}
 }
@@ -129,9 +129,7 @@ Installed Size  : 2.5 GiB
 			}
 
 			result := totalMiB / 1024 // Convert to GiB
-			if result != tt.expected {
-				t.Errorf("parseInstalledSize() = %f GiB, want %f GiB", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // expectedCommands is the canonical list of all available commands.
@@ -103,26 +105,13 @@ func TestAllCommandsMatchExpectedList(t *testing.T) {
 
 	// Report any discrepancies
 	if len(missing) > 0 || len(extra) > 0 {
-		t.Error("Command list mismatch detected!")
-
 		if len(missing) > 0 {
-			t.Errorf("\nMissing from expectedCommands (add these):")
-			for _, cmd := range missing {
-				t.Errorf("  %q,", cmd)
-			}
+			t.Errorf("Missing from expectedCommands (add these): %v", missing)
 		}
-
 		if len(extra) > 0 {
-			t.Errorf("\nExtra in expectedCommands (remove these):")
-			for _, cmd := range extra {
-				t.Errorf("  %q,", cmd)
-			}
+			t.Errorf("Extra in expectedCommands (remove these): %v", extra)
 		}
-
-		t.Errorf("\nActual commands found:")
-		for _, cmd := range allCommands {
-			t.Errorf("  %q,", cmd)
-		}
+		t.Errorf("Actual commands found: %v", allCommands)
 	}
 }
 
@@ -135,9 +124,7 @@ func TestExpectedCommandsAreValid(t *testing.T) {
 	}
 
 	for _, expectedCmd := range expectedCommands {
-		if !actualMap[expectedCmd] {
-			t.Errorf("Expected command %q not found in actual commands", expectedCmd)
-		}
+		assert.True(t, actualMap[expectedCmd], "Expected command %q not found in actual commands", expectedCmd)
 	}
 }
 
@@ -145,19 +132,8 @@ func TestCommandPathsAreWellFormed(t *testing.T) {
 	allCommands := getAllCommands(rootCmd, "")
 
 	for _, cmd := range allCommands {
-		// Commands should not be empty
-		if strings.TrimSpace(cmd) == "" {
-			t.Errorf("Found empty command path")
-		}
-
-		// Commands should not have leading/trailing spaces
-		if cmd != strings.TrimSpace(cmd) {
-			t.Errorf("Command %q has leading/trailing spaces", cmd)
-		}
-
-		// Commands should not have double spaces
-		if strings.Contains(cmd, "  ") {
-			t.Errorf("Command %q contains double spaces", cmd)
-		}
+		require.NotEmpty(t, strings.TrimSpace(cmd), "Found empty command path")
+		assert.Equal(t, strings.TrimSpace(cmd), cmd, "Command %q has leading/trailing spaces", cmd)
+		assert.False(t, strings.Contains(cmd, "  "), "Command %q contains double spaces", cmd)
 	}
 }

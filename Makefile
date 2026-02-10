@@ -43,16 +43,16 @@ uninstall: ## Remove arc from ~/.local/bin
 clean: ## Remove the built binary and coverage files
 	@echo "Cleaning build artifacts..."
 	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
-	@rm -f coverage.out
+	@rm -f coverage.out test-results.xml
 	@echo "Clean complete"
 
-test: ## Run tests
+test: ## Run tests with gotestsum (install: go install gotest.tools/gotestsum@latest)
 	@echo "Running tests..."
-	go test -v -race ./...
+	gotestsum --format testdox -- -race ./...
 
-test-ci: ## Run tests with coverage (for CI)
+test-ci: ## Run tests with coverage and JUnit output (for CI)
 	@echo "Running tests with coverage..."
-	go test -v -race -coverprofile=coverage.out ./...
+	gotestsum --format testdox --junitfile test-results.xml -- -race -coverprofile=coverage.out ./...
 	@echo ""
 	@echo "Coverage by function:"
 	@go tool cover -func=coverage.out | tail -1

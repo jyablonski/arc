@@ -2,66 +2,81 @@ package shell
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRunSudo(t *testing.T) {
-	// RunSudo is a simple wrapper that prepends "sudo" to the command
-	// We can test that it correctly constructs the command
-
-	// Test that RunSudo calls Run with "sudo" as the first argument
-	// Since we can't easily mock Run, we'll test with a command that should fail
-	// (assuming sudo requires password or the command doesn't exist)
-
 	tests := []struct {
-		name    string
-		command string
-		args    []string
-		wantErr bool
+		name       string
+		command    string
+		args       []string
+		mockOutput string
+		mockError  error
+		wantErr    bool
 	}{
 		{
-			name:    "sudo with echo",
-			command: "echo",
-			args:    []string{"test"},
-			wantErr: false, // echo should work even with sudo
+			name:       "sudo with echo",
+			command:    "echo",
+			args:       []string{"test"},
+			mockOutput: "test",
+			mockError:  nil,
+			wantErr:    false,
 		},
 		{
-			name:    "sudo with nonexistent command",
-			command: "nonexistent_command_xyz123",
-			args:    []string{},
-			wantErr: true,
+			name:       "sudo with nonexistent command",
+			command:    "nonexistent_command_xyz123",
+			args:       []string{},
+			mockOutput: "",
+			mockError:  assert.AnError,
+			wantErr:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// RunSudo prepends "sudo" and the command name, then adds args
-			// So "sudo echo test" becomes Run("sudo", "echo", "test")
-			_, err := RunSudo(tt.command, tt.args...)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("RunSudo(%q, %v) error = %v, wantErr %v", tt.command, tt.args, err, tt.wantErr)
+			mock := &MockRunner{
+				RunFunc: func(name string, args ...string) (string, error) {
+					// Verify sudo is called with correct arguments
+					assert.Equal(t, "sudo", name)
+					assert.Equal(t, tt.command, args[0])
+					return tt.mockOutput, tt.mockError
+				},
+			}
+			SetMockRunner(mock)
+			defer ClearMockRunner()
+
+			output, err := RunSudo(tt.command, tt.args...)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.mockOutput, output)
 			}
 		})
 	}
 }
 
-// TestRunSudoCommandConstruction tests that RunSudo correctly constructs the sudo command
 func TestRunSudoCommandConstruction(t *testing.T) {
-	// Verify RunSudo calls Run with correct arguments
-	// Since RunSudo is: sudoArgs := append([]string{name}, args...)
-	// Then: Run("sudo", sudoArgs...)
-	// So for RunSudo("echo", "hello", "world")
-	// It should call Run("sudo", "echo", "hello", "world")
+	// Verify RunSudo correctly prepends "sudo" to the command
+	var capturedName string
+	var capturedArgs []string
 
-	// Test with a simple command that should work
-	output, err := RunSudo("echo", "test")
-	if err != nil {
-		// If sudo requires a password, this will fail, which is acceptable
-		// We're mainly testing that the function doesn't panic and constructs commands correctly
-		t.Logf("RunSudo failed (may require sudo password): %v", err)
-		return
+	mock := &MockRunner{
+		RunFunc: func(name string, args ...string) (string, error) {
+			capturedName = name
+			capturedArgs = args
+			return "mocked", nil
+		},
 	}
+	SetMockRunner(mock)
+	defer ClearMockRunner()
 
-	if output != "test" {
-		t.Errorf("RunSudo() output = %q, want %q", output, "test")
-	}
+	_, err := RunSudo("echo", "hello", "world")
+	require.NoError(t, err)
+
+	assert.Equal(t, "sudo", capturedName)
+	assert.Equal(t, []string{"echo", "hello", "world"}, capturedArgs)
 }

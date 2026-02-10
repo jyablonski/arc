@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompareVersions(t *testing.T) {
@@ -71,9 +74,7 @@ func TestCompareVersions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := compareVersions(tt.current, tt.latest)
-			if result != tt.expected {
-				t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.current, tt.latest, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -91,7 +92,8 @@ func TestGetLatestRelease(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != fmt.Sprintf("/repos/%s/%s/releases/latest", githubOwner, githubRepo) {
+		expectedPath := fmt.Sprintf("/repos/%s/%s/releases/latest", githubOwner, githubRepo)
+		if r.URL.Path != expectedPath {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
@@ -109,22 +111,13 @@ func TestGetLatestRelease(t *testing.T) {
 
 	// Test fetching the release
 	release, err := getLatestRelease()
-	if err != nil {
-		t.Fatalf("getLatestRelease() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if release.TagName != "v0.3.0" {
-		t.Errorf("getLatestRelease() TagName = %q, want %q", release.TagName, "v0.3.0")
-	}
-
-	if len(release.Assets) != 1 {
-		t.Errorf("getLatestRelease() Assets length = %d, want %d", len(release.Assets), 1)
-	}
+	assert.Equal(t, "v0.3.0", release.TagName)
+	assert.Len(t, release.Assets, 1)
 
 	expectedAssetName := fmt.Sprintf("arc-%s-%s", runtime.GOOS, runtime.GOARCH)
-	if release.Assets[0].Name != expectedAssetName {
-		t.Errorf("getLatestRelease() Asset Name = %q, want %q", release.Assets[0].Name, expectedAssetName)
-	}
+	assert.Equal(t, expectedAssetName, release.Assets[0].Name)
 }
 
 func TestGetLatestRelease_ErrorHandling(t *testing.T) {
@@ -141,9 +134,7 @@ func TestGetLatestRelease_ErrorHandling(t *testing.T) {
 
 	// Test fetching the release should fail
 	_, err := getLatestRelease()
-	if err == nil {
-		t.Error("getLatestRelease() expected error, got nil")
-	}
+	assert.Error(t, err)
 }
 
 func TestDownloadAndReplace(t *testing.T) {
@@ -154,9 +145,7 @@ func TestDownloadAndReplace(t *testing.T) {
 	// Create a mock binary file
 	mockBinaryContent := []byte("mock binary content")
 	err := os.WriteFile(testBinaryPath, mockBinaryContent, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create test binary: %v", err)
-	}
+	require.NoError(t, err, "Failed to create test binary")
 
 	// Create a mock HTTP server that serves the binary
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -167,27 +156,15 @@ func TestDownloadAndReplace(t *testing.T) {
 
 	// Test downloading and replacing
 	err = downloadAndReplace(testBinaryPath, server.URL)
-	if err != nil {
-		t.Fatalf("downloadAndReplace() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify the file was replaced
 	content, err := os.ReadFile(testBinaryPath)
-	if err != nil {
-		t.Fatalf("Failed to read replaced binary: %v", err)
-	}
-
-	if string(content) != string(mockBinaryContent) {
-		t.Errorf("downloadAndReplace() content mismatch")
-	}
+	require.NoError(t, err, "Failed to read replaced binary")
+	assert.Equal(t, mockBinaryContent, content)
 
 	// Verify file permissions
 	info, err := os.Stat(testBinaryPath)
-	if err != nil {
-		t.Fatalf("Failed to stat binary: %v", err)
-	}
-
-	if info.Mode().Perm()&0111 == 0 {
-		t.Error("downloadAndReplace() binary is not executable")
-	}
+	require.NoError(t, err, "Failed to stat binary")
+	assert.NotZero(t, info.Mode().Perm()&0111, "binary should be executable")
 }

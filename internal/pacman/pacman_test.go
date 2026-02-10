@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParsePackageList(t *testing.T) {
@@ -41,9 +43,7 @@ func TestParsePackageList(t *testing.T) {
 			if tt.input == "" {
 				lines = []string{}
 			}
-			if len(lines) != tt.expected {
-				t.Errorf("parsePackageList() = %d, want %d", len(lines), tt.expected)
-			}
+			assert.Len(t, lines, tt.expected)
 		})
 	}
 }
@@ -123,9 +123,7 @@ Installed Size  : 1.0 GiB
 			}
 
 			result := totalMiB / 1024 // Convert to GiB
-			if result != tt.expected {
-				t.Errorf("parseInstalledSize() = %f GiB, want %f GiB", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -171,16 +169,7 @@ func TestParseOrphanedPackages(t *testing.T) {
 				}
 			}
 
-			if len(packages) != len(tt.expected) {
-				t.Errorf("parseOrphanedPackages() = %v, want %v", packages, tt.expected)
-				return
-			}
-
-			for i, pkg := range packages {
-				if pkg != tt.expected[i] {
-					t.Errorf("parseOrphanedPackages()[%d] = %q, want %q", i, pkg, tt.expected[i])
-				}
-			}
+			assert.Equal(t, tt.expected, packages)
 		})
 	}
 }
@@ -189,14 +178,15 @@ func TestCheckPacmanAvailable(t *testing.T) {
 	err := CheckPacmanAvailable()
 	// This test depends on the system - pacman might or might not be available
 	// We just check that it doesn't panic
-	if err != nil && err.Error() != "pacman is not available in PATH" {
-		t.Errorf("CheckPacmanAvailable() returned unexpected error: %v", err)
+	if err != nil {
+		assert.Equal(t, "pacman is not available in PATH", err.Error())
 	}
 }
 
 func TestCheckYayAvailable(t *testing.T) {
-	result := CheckYayAvailable()
 	// This test depends on the system - yay might or might not be available
-	// We just check that it returns a boolean
-	_ = result // Just ensure it doesn't panic
+	// We just check that it returns a boolean and doesn't panic
+	assert.NotPanics(t, func() {
+		_ = CheckYayAvailable()
+	})
 }
