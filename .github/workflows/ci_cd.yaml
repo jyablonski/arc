@@ -37,6 +37,7 @@ jobs:
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
 
+      # runs tests and outputs results to `coverage.out` for Coveralls
       - name: Run tests with coverage
         run: make test-ci
 
