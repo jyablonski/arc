@@ -93,3 +93,51 @@ func TestMockRunnerIntegration(t *testing.T) {
 		})
 	}
 }
+
+func TestMockRunInteractive(t *testing.T) {
+	var capturedName string
+	var capturedArgs []string
+
+	mock := &MockRunner{
+		RunInteractiveFunc: func(name string, args ...string) error {
+			capturedName = name
+			capturedArgs = args
+			return nil
+		},
+	}
+	SetMockRunner(mock)
+	defer ClearMockRunner()
+
+	err := RunInteractive("sudo", "pacman", "-Syu")
+	require.NoError(t, err)
+	assert.Equal(t, "sudo", capturedName)
+	assert.Equal(t, []string{"pacman", "-Syu"}, capturedArgs)
+}
+
+func TestMockRunInteractiveError(t *testing.T) {
+	mock := &MockRunner{
+		RunInteractiveFunc: func(name string, args ...string) error {
+			return fmt.Errorf("interactive command failed")
+		},
+	}
+	SetMockRunner(mock)
+	defer ClearMockRunner()
+
+	err := RunInteractive("sudo", "pacman", "-Syu")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "interactive command failed")
+}
+
+func TestMockCommandExists(t *testing.T) {
+	mock := &MockRunner{
+		CommandExistsFunc: func(name string) bool {
+			return name == "pacman" || name == "git"
+		},
+	}
+	SetMockRunner(mock)
+	defer ClearMockRunner()
+
+	assert.True(t, CommandExists("pacman"))
+	assert.True(t, CommandExists("git"))
+	assert.False(t, CommandExists("nonexistent"))
+}

@@ -36,7 +36,12 @@ func RunSudo(name string, args ...string) (string, error) {
 }
 
 // RunInteractive executes a command that needs an interactive TTY
+// If a mock runner is set with RunInteractiveFunc, it will use the mock instead
 func RunInteractive(name string, args ...string) error {
+	if mockRunner != nil && mockRunner.RunInteractiveFunc != nil {
+		return mockRunner.RunInteractiveFunc(name, args...)
+	}
+
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -45,7 +50,12 @@ func RunInteractive(name string, args ...string) error {
 }
 
 // CommandExists checks if a command exists in PATH
+// If a mock runner is set with CommandExistsFunc, it will use the mock instead
 func CommandExists(name string) bool {
+	if mockRunner != nil && mockRunner.CommandExistsFunc != nil {
+		return mockRunner.CommandExistsFunc(name)
+	}
+
 	_, err := exec.LookPath(name)
 	return err == nil
 }

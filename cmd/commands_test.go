@@ -19,6 +19,7 @@ var expectedCommands = []string{
 	"docker clean",
 	"gh",
 	"git cleanup",
+	"incident [title]",
 	"info",
 	"installed",
 	"packages",

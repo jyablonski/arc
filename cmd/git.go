@@ -39,16 +39,7 @@ This should be run from within a Git repository.`,
 			return fmt.Errorf("failed to get merged branches: %w", err)
 		}
 
-		lines := strings.Split(strings.TrimSpace(mergedOutput), "\n")
-		branchesToDelete := []string{}
-
-		for _, line := range lines {
-			branch := strings.TrimSpace(strings.TrimPrefix(line, "*"))
-			if branch == "" || branch == currentBranch || branch == "main" || branch == "master" {
-				continue
-			}
-			branchesToDelete = append(branchesToDelete, branch)
-		}
+		branchesToDelete := filterMergedBranches(mergedOutput, currentBranch)
 
 		if len(branchesToDelete) > 0 {
 			output.Info(fmt.Sprintf("Removing %d merged branches...", len(branchesToDelete)))
@@ -72,6 +63,23 @@ This should be run from within a Git repository.`,
 
 		return nil
 	},
+}
+
+// filterMergedBranches returns branches that should be deleted from `git branch --merged` output.
+// It excludes the current branch, main, and master.
+func filterMergedBranches(mergedOutput, currentBranch string) []string {
+	lines := strings.Split(strings.TrimSpace(mergedOutput), "\n")
+	branchesToDelete := []string{}
+
+	for _, line := range lines {
+		branch := strings.TrimSpace(strings.TrimPrefix(line, "*"))
+		if branch == "" || branch == currentBranch || branch == "main" || branch == "master" {
+			continue
+		}
+		branchesToDelete = append(branchesToDelete, branch)
+	}
+
+	return branchesToDelete
 }
 
 func init() {

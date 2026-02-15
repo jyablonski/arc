@@ -36,7 +36,7 @@ func Error(s string) {
 
 // Info prints an info message
 func Info(s string) {
-	infoColor.Printf("ℹ %s\n", s)
+	infoColor.Printf("i %s\n", s)
 }
 
 // Warning prints a warning message
