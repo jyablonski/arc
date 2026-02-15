@@ -5,46 +5,78 @@ import (
 	"os"
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHeader(t *testing.T) {
-	assert.NotPanics(t, func() {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	stdout, stderr := captureOutput(t, func() {
 		Header("Test Header")
 	})
+	combined := stdout + stderr
+
+	assert.Contains(t, combined, "Test Header")
+	assert.Contains(t, stdout, "---") // separator goes to stdout via fmt.Println
 }
 
 func TestSuccess(t *testing.T) {
-	assert.NotPanics(t, func() {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	_, stderr := captureOutput(t, func() {
 		Success("Test success")
 	})
+
+	assert.Contains(t, stderr, "✓")
+	assert.Contains(t, stderr, "Test success")
 }
 
 func TestError(t *testing.T) {
-	assert.NotPanics(t, func() {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	_, stderr := captureOutput(t, func() {
 		Error("Test error")
 	})
+
+	assert.Contains(t, stderr, "✗")
+	assert.Contains(t, stderr, "Test error")
 }
 
 func TestInfo(t *testing.T) {
-	assert.NotPanics(t, func() {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	_, stderr := captureOutput(t, func() {
 		Info("Test info")
 	})
+
+	assert.Contains(t, stderr, "i ")
+	assert.Contains(t, stderr, "Test info")
 }
 
 func TestWarning(t *testing.T) {
-	assert.NotPanics(t, func() {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	_, stderr := captureOutput(t, func() {
 		Warning("Test warning")
 	})
+
+	assert.Contains(t, stderr, "⚠")
+	assert.Contains(t, stderr, "Test warning")
 }
 
 func TestPrint(t *testing.T) {
-	output := captureStdout(t, func() {
+	stdout, _ := captureOutput(t, func() {
 		Print("Test print")
 	})
 
-	assert.Contains(t, output, "Test print")
+	assert.Contains(t, stdout, "Test print")
 }
 
 func TestTable(t *testing.T) {
@@ -54,40 +86,58 @@ func TestTable(t *testing.T) {
 		{"package2", "200 MiB"},
 	}
 
-	output := captureStdout(t, func() {
+	stdout, _ := captureOutput(t, func() {
 		Table(headers, rows)
 	})
 
-	assert.Contains(t, output, "Name")
-	assert.Contains(t, output, "Size")
-	assert.Contains(t, output, "package1")
-	assert.Contains(t, output, "package2")
+	assert.Contains(t, stdout, "Name")
+	assert.Contains(t, stdout, "Size")
+	assert.Contains(t, stdout, "package1")
+	assert.Contains(t, stdout, "package2")
 }
 
 func TestPrintKeyValue(t *testing.T) {
-	output := captureStdout(t, func() {
+	stdout, _ := captureOutput(t, func() {
 		PrintKeyValue("Key", "Value")
 	})
 
-	assert.Contains(t, output, "Key")
-	assert.Contains(t, output, "Value")
+	assert.Contains(t, stdout, "Key")
+	assert.Contains(t, stdout, "Value")
 }
 
-// captureStdout is a test helper that captures stdout during fn execution
-func captureStdout(t *testing.T, fn func()) string {
+// captureOutput captures both stdout and stderr during fn execution
+func captureOutput(t *testing.T, fn func()) (stdout string, stderr string) {
 	t.Helper()
 
-	var buf bytes.Buffer
+	// Capture stdout
+	var stdoutBuf bytes.Buffer
 	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
+	stdoutR, stdoutW, err := os.Pipe()
 	require.NoError(t, err)
-	os.Stdout = w
+	os.Stdout = stdoutW
+
+	// Capture stderr (color library writes here by default)
+	var stderrBuf bytes.Buffer
+	oldStderr := os.Stderr
+	stderrR, stderrW, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = stderrW
+
+	// The fatih/color library uses color.Output which defaults to os.Stderr.
+	// We need to update it to point to our pipe.
+	oldColorOutput := color.Output
+	color.Output = stderrW
 
 	fn()
 
-	w.Close()
+	stdoutW.Close()
+	stderrW.Close()
 	os.Stdout = oldStdout
-	buf.ReadFrom(r)
+	os.Stderr = oldStderr
+	color.Output = oldColorOutput
 
-	return buf.String()
+	stdoutBuf.ReadFrom(stdoutR)
+	stderrBuf.ReadFrom(stderrR)
+
+	return stdoutBuf.String(), stderrBuf.String()
 }

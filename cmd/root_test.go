@@ -7,13 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExecute(t *testing.T) {
-	// Execute is the main entry point that calls rootCmd.Execute()
-	// We can't easily test Execute without it actually running and potentially exiting,
-	// so we test that the rootCmd is properly initialized instead
-	// The actual execution is tested through integration tests or manual testing
-}
-
 func TestRootCmdInitialization(t *testing.T) {
 	require.NotNil(t, rootCmd, "rootCmd should be initialized")
 
