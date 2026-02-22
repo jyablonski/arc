@@ -28,7 +28,7 @@ var ghRestartDashboardCmd = &cobra.Command{
 	Long:  `Trigger the vm_cron_restart.yml workflow in the nba_elt_dashboard repository and wait for completion.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !shell.CommandExists("gh") {
-			return fmt.Errorf("gh CLI is not available in PATH")
+			return shell.NewErrToolNotAvailable("gh")
 		}
 
 		output.Info("Triggering GitHub workflow...")
@@ -78,7 +78,7 @@ func getLatestWorkflowRunID() (string, error) {
 		return "", err
 	}
 	if result == "" {
-		return "", fmt.Errorf("no workflow runs found")
+		return "", ErrNoWorkflowRuns
 	}
 	return result, nil
 }

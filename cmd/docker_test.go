@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestDockerCmd(t *testing.T) {
 		mockRun     func(name string, args ...string) (string, error)
 		mockCmdExst func(name string) bool
 		expectError bool
-		errContains string
+		wantToolErr bool
 	}{
 		{
 			name: "docker not available",
@@ -22,7 +23,7 @@ func TestDockerCmd(t *testing.T) {
 				return false
 			},
 			expectError: true,
-			errContains: "docker is not available",
+			wantToolErr: true,
 		},
 		{
 			name: "successful cleanup",
@@ -74,7 +75,10 @@ func TestDockerCmd(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantToolErr {
+					var toolErr *shell.ErrToolNotAvailable
+					assert.True(t, errors.As(err, &toolErr))
+				}
 			} else {
 				assert.NoError(t, err)
 			}

@@ -2,6 +2,7 @@ package notify
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -119,6 +120,9 @@ func TestSlackSend(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				var webhookErr *WebhookError
+				assert.True(t, errors.As(err, &webhookErr))
+				assert.Equal(t, tt.statusCode, webhookErr.StatusCode)
 			} else {
 				assert.NoError(t, err)
 				if tt.checkBody != nil {
@@ -225,6 +229,9 @@ func TestDiscordSend(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				var webhookErr *WebhookError
+				assert.True(t, errors.As(err, &webhookErr))
+				assert.Equal(t, tt.statusCode, webhookErr.StatusCode)
 			} else {
 				assert.NoError(t, err)
 				if tt.checkBody != nil {

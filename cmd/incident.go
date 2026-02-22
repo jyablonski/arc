@@ -23,14 +23,14 @@ func buildNotifiers(includeDiscord bool) ([]notify.Notifier, error) {
 
 	slackURL := os.Getenv("SLACK_WEBHOOK_URL")
 	if slackURL == "" {
-		return nil, fmt.Errorf("SLACK_WEBHOOK_URL is not set")
+		return nil, ErrSlackWebhookNotSet
 	}
 	notifiers = append(notifiers, notify.NewSlack(slackURL))
 
 	if includeDiscord {
 		discordURL := os.Getenv("DISCORD_WEBHOOK_URL")
 		if discordURL == "" {
-			return nil, fmt.Errorf("--discord flag set but DISCORD_WEBHOOK_URL is not set")
+			return nil, ErrDiscordWebhookNotSet
 		}
 		notifiers = append(notifiers, notify.NewDiscord(discordURL))
 	}
@@ -81,7 +81,7 @@ Examples:
 		}
 
 		if len(sendErrors) == len(notifiers) {
-			return fmt.Errorf("failed to send incident to all configured destinations")
+			return ErrAllNotifiersFailed
 		}
 
 		return nil

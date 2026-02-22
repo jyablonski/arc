@@ -23,7 +23,7 @@ var awsWhoamiCmd = &cobra.Command{
 	Long:  `Show the current AWS identity using sts get-caller-identity.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !shell.CommandExists("aws") {
-			return fmt.Errorf("aws CLI is not available in PATH")
+			return shell.NewErrToolNotAvailable("aws")
 		}
 
 		identity, err := aws.GetCurrentIdentity()
@@ -44,7 +44,7 @@ var awsRotateKeysCmd = &cobra.Command{
 Automatically backs up old credentials and updates ~/.aws/credentials.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !shell.CommandExists("aws") {
-			return fmt.Errorf("aws CLI is not available in PATH")
+			return shell.NewErrToolNotAvailable("aws")
 		}
 
 		output.Header("Rotating IAM Access Keys")
@@ -102,7 +102,7 @@ Automatically backs up old credentials and updates ~/.aws/credentials.`,
 
 		userArn, ok := identity["Arn"].(string)
 		if !ok {
-			return fmt.Errorf("failed to get user ARN")
+			return ErrNoUserARN
 		}
 
 		username, err := aws.GetUsername(userArn)

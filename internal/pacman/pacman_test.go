@@ -1,8 +1,10 @@
 package pacman
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -11,7 +13,9 @@ func TestCheckPacmanAvailable(t *testing.T) {
 	// This test depends on the system - pacman might or might not be available
 	// We just check that it doesn't panic
 	if err != nil {
-		assert.Equal(t, "pacman is not available in PATH", err.Error())
+		var toolErr *shell.ErrToolNotAvailable
+		assert.True(t, errors.As(err, &toolErr))
+		assert.Equal(t, "pacman", toolErr.Tool)
 	}
 }
 

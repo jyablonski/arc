@@ -16,12 +16,12 @@ var gitCmd = &cobra.Command{
 This should be run from within a Git repository.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !shell.CommandExists("git") {
-			return fmt.Errorf("git is not available in PATH")
+			return shell.NewErrToolNotAvailable("git")
 		}
 
 		// Check if we're in a git repo
 		if _, err := shell.Run("git", "rev-parse", "--git-dir"); err != nil {
-			return fmt.Errorf("not in a git repository: %w", err)
+			return fmt.Errorf("%w: %w", ErrNotGitRepo, err)
 		}
 
 		output.Header("Cleaning up Git repository")

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jyablonski/arc/internal/shell"
@@ -63,7 +64,7 @@ func TestValidateCmd(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "missing required tools")
+				assert.True(t, errors.Is(err, ErrValidationFailed))
 			} else {
 				assert.NoError(t, err)
 			}

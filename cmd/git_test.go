@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -76,6 +77,8 @@ func TestGitCmd(t *testing.T) {
 		mockCmdExst func(name string) bool
 		expectError bool
 		errContains string
+		wantToolErr bool
+		wantErr     error
 	}{
 		{
 			name: "git not available",
@@ -83,7 +86,7 @@ func TestGitCmd(t *testing.T) {
 				return false
 			},
 			expectError: true,
-			errContains: "git is not available",
+			wantToolErr: true,
 		},
 		{
 			name: "not in git repo",
@@ -97,7 +100,7 @@ func TestGitCmd(t *testing.T) {
 				return "", nil
 			},
 			expectError: true,
-			errContains: "not in a git repository",
+			wantErr:     ErrNotGitRepo,
 		},
 		{
 			name: "successful cleanup with merged branches",
@@ -171,7 +174,16 @@ func TestGitCmd(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantToolErr {
+					var toolErr *shell.ErrToolNotAvailable
+					assert.True(t, errors.As(err, &toolErr))
+				}
+				if tt.wantErr != nil {
+					assert.True(t, errors.Is(err, tt.wantErr))
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 			} else {
 				assert.NoError(t, err)
 			}

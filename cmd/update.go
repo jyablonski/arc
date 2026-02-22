@@ -32,6 +32,12 @@ and cleaning the package cache with paccache -rv.`,
 			return err
 		}
 
+		// Update keyring first to avoid signature issues
+		output.Info("Updating archlinux-keyring...")
+		if err := shell.RunInteractive("sudo", "pacman", "-Sy", "--needed", "archlinux-keyring"); err != nil {
+			return fmt.Errorf("keyring update failed: %w", err)
+		}
+
 		// Get kernel packages before update
 		kernelPackagesBefore, err := getKernelPackages()
 		if err != nil {
@@ -107,7 +113,7 @@ var updateUvCmd = &cobra.Command{
 	Long:  `Update uv to the latest version using uv self update.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !shell.CommandExists("uv") {
-			return fmt.Errorf("uv is not available in PATH")
+			return shell.NewErrToolNotAvailable("uv")
 		}
 
 		output.Info("Updating uv...")

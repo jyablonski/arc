@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,8 +16,7 @@ func TestBuildNotifiers(t *testing.T) {
 		discordURL     string
 		includeDiscord bool
 		expectCount    int
-		expectError    bool
-		errContains    string
+		expectError    error
 	}{
 		{
 			name:        "slack only (default)",
@@ -33,16 +33,14 @@ func TestBuildNotifiers(t *testing.T) {
 		{
 			name:        "slack not configured",
 			slackURL:    "",
-			expectError: true,
-			errContains: "SLACK_WEBHOOK_URL is not set",
+			expectError: ErrSlackWebhookNotSet,
 		},
 		{
 			name:           "discord flag set but discord url missing",
 			slackURL:       "https://hooks.slack.com/test",
 			discordURL:     "",
 			includeDiscord: true,
-			expectError:    true,
-			errContains:    "DISCORD_WEBHOOK_URL is not set",
+			expectError:    ErrDiscordWebhookNotSet,
 		},
 		{
 			name:        "discord url set but flag not passed",
@@ -59,11 +57,9 @@ func TestBuildNotifiers(t *testing.T) {
 
 			notifiers, err := buildNotifiers(tt.includeDiscord)
 
-			if tt.expectError {
+			if tt.expectError != nil {
 				assert.Error(t, err)
-				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
-				}
+				assert.True(t, errors.Is(err, tt.expectError))
 			} else {
 				assert.NoError(t, err)
 				assert.Len(t, notifiers, tt.expectCount)
@@ -83,7 +79,7 @@ func TestIncidentCmd(t *testing.T) {
 		discordURL  string
 		statusCode  int
 		expectError bool
-		errContains string
+		wantErr     error
 	}{
 		{
 			name:        "missing title argument",
@@ -97,7 +93,7 @@ func TestIncidentCmd(t *testing.T) {
 			slackURL:    "",
 			discordURL:  "",
 			expectError: true,
-			errContains: "SLACK_WEBHOOK_URL is not set",
+			wantErr:     ErrSlackWebhookNotSet,
 		},
 		{
 			name:        "successful send to slack only",
@@ -129,7 +125,7 @@ func TestIncidentCmd(t *testing.T) {
 			discordURL:  "",
 			statusCode:  200,
 			expectError: true,
-			errContains: "DISCORD_WEBHOOK_URL is not set",
+			wantErr:     ErrDiscordWebhookNotSet,
 		},
 		{
 			name:        "webhook returns error",
@@ -139,7 +135,7 @@ func TestIncidentCmd(t *testing.T) {
 			slackURL:    "will-be-replaced",
 			statusCode:  500,
 			expectError: true,
-			errContains: "failed to send incident to all configured destinations",
+			wantErr:     ErrAllNotifiersFailed,
 		},
 	}
 
@@ -195,8 +191,8 @@ func TestIncidentCmd(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantErr != nil {
+					assert.True(t, errors.Is(err, tt.wantErr))
 				}
 			} else {
 				assert.NoError(t, err)

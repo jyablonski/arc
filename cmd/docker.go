@@ -14,7 +14,7 @@ var dockerCmd = &cobra.Command{
 	Long:  `Prune Docker images, containers, and volumes to free up disk space.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !shell.CommandExists("docker") {
-			return fmt.Errorf("docker is not available in PATH")
+			return shell.NewErrToolNotAvailable("docker")
 		}
 
 		output.Header("Cleaning Docker resources")
