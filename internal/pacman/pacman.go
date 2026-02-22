@@ -1,7 +1,7 @@
 package pacman
 
 import (
-	"fmt"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,6 +9,9 @@ import (
 
 	"github.com/jyablonski/arc/internal/shell"
 )
+
+// ErrParseCacheSize is returned when the package cache size output cannot be parsed.
+var ErrParseCacheSize = errors.New("could not parse cache size")
 
 // PackageInfo represents package information
 type PackageInfo struct {
@@ -130,7 +133,7 @@ func GetCacheSize() (string, error) {
 	if len(parts) > 0 {
 		return parts[0], nil
 	}
-	return "", fmt.Errorf("could not parse cache size")
+	return "", ErrParseCacheSize
 }
 
 // GetOrphanedPackages returns a list of orphaned packages
@@ -271,7 +274,7 @@ func SearchPackages(query string) ([]string, error) {
 // CheckPacmanAvailable checks if pacman is available
 func CheckPacmanAvailable() error {
 	if !shell.CommandExists("pacman") {
-		return fmt.Errorf("pacman is not available in PATH")
+		return shell.NewErrToolNotAvailable("pacman")
 	}
 	return nil
 }

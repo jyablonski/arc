@@ -90,7 +90,7 @@ enable additional features.`,
 		} else {
 			output.Error("Some required tools are missing!")
 			output.Info("Run 'arc setup' to install missing dependencies")
-			return fmt.Errorf("validation failed: missing required tools")
+			return ErrValidationFailed
 		}
 	},
 }

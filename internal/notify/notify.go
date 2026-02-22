@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// WebhookError is returned when a webhook endpoint returns a non-success HTTP status.
+type WebhookError struct {
+	StatusCode int
+}
+
+func (e *WebhookError) Error() string {
+	return fmt.Sprintf("webhook returned status %d", e.StatusCode)
+}
+
 // Incident represents an incident alert to be sent
 type Incident struct {
 	Title    string
@@ -152,7 +161,7 @@ func postJSON(client *http.Client, url string, payload interface{}) error {
 
 	// Slack returns 200, Discord returns 204
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
+		return &WebhookError{StatusCode: resp.StatusCode}
 	}
 
 	return nil

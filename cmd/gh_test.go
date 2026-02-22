@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -15,6 +16,7 @@ func TestGetLatestWorkflowRunID(t *testing.T) {
 		expectedID  string
 		expectError bool
 		errContains string
+		wantErr     error
 	}{
 		{
 			name: "successful run ID retrieval",
@@ -30,7 +32,7 @@ func TestGetLatestWorkflowRunID(t *testing.T) {
 				return "", nil
 			},
 			expectError: true,
-			errContains: "no workflow runs found",
+			wantErr:     ErrNoWorkflowRuns,
 		},
 		{
 			name: "API call fails",
@@ -54,7 +56,12 @@ func TestGetLatestWorkflowRunID(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantErr != nil {
+					assert.True(t, errors.Is(err, tt.wantErr))
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedID, runID)
@@ -137,6 +144,7 @@ func TestGhRestartDashboardCmd(t *testing.T) {
 		mockCmdExst func(name string) bool
 		expectError bool
 		errContains string
+		wantToolErr bool
 	}{
 		{
 			name: "gh not available",
@@ -144,7 +152,7 @@ func TestGhRestartDashboardCmd(t *testing.T) {
 				return false
 			},
 			expectError: true,
-			errContains: "gh CLI is not available",
+			wantToolErr: true,
 		},
 		{
 			name: "workflow trigger fails",
@@ -172,7 +180,13 @@ func TestGhRestartDashboardCmd(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantToolErr {
+					var toolErr *shell.ErrToolNotAvailable
+					assert.True(t, errors.As(err, &toolErr))
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 			} else {
 				assert.NoError(t, err)
 			}

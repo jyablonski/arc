@@ -3,6 +3,7 @@ package aws
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,14 @@ import (
 	"time"
 
 	"github.com/jyablonski/arc/internal/shell"
+)
+
+var (
+	// ErrInvalidARNFormat is returned when an ARN string cannot be parsed.
+	ErrInvalidARNFormat = errors.New("invalid ARN format")
+
+	// ErrParseAccessKeys is returned when the access keys response cannot be parsed.
+	ErrParseAccessKeys = errors.New("failed to parse access keys")
 )
 
 // GetCurrentIdentity returns the current AWS identity
@@ -31,7 +40,7 @@ func GetCurrentIdentity() (map[string]interface{}, error) {
 func GetUsername(arn string) (string, error) {
 	parts := strings.Split(arn, "/")
 	if len(parts) == 0 {
-		return "", fmt.Errorf("invalid ARN format")
+		return "", ErrInvalidARNFormat
 	}
 	return parts[len(parts)-1], nil
 }
@@ -50,7 +59,7 @@ func ListAccessKeys(username string) ([]string, error) {
 
 	keys, ok := keysResponse["AccessKeyMetadata"].([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("failed to parse access keys")
+		return nil, ErrParseAccessKeys
 	}
 
 	keyIDs := make([]string, 0, len(keys))

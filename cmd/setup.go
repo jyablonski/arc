@@ -20,7 +20,7 @@ This includes uv, gh (GitHub CLI), and other system utilities.`,
 
 		// Check if we're on Arch Linux
 		if !shell.CommandExists("pacman") {
-			return fmt.Errorf("pacman is not available. This setup command is designed for Arch Linux")
+			return shell.NewErrToolNotAvailable("pacman")
 		}
 
 		packagesToInstall := []struct {
