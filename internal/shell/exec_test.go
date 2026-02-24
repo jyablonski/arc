@@ -86,17 +86,16 @@ func TestRun(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestRunWithOutput(t *testing.T) {
-	output, err := Run("echo", "test", "output")
-	require.NoError(t, err)
-	assert.Equal(t, "test output", output)
-}
+	t.Run("When running with output, it returns trimmed output", func(t *testing.T) {
+		output, err := Run("echo", "test", "output")
+		require.NoError(t, err)
+		assert.Equal(t, "test output", output)
+	})
 
-func TestRunWithWhitespace(t *testing.T) {
-	output, err := Run("echo", "  hello  ")
-	require.NoError(t, err)
-	// TrimSpace removes leading/trailing whitespace from output
-	assert.Equal(t, "hello", output)
+	t.Run("When running with whitespace, it trims the result", func(t *testing.T) {
+		output, err := Run("echo", "  hello  ")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", output)
+	})
 }

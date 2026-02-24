@@ -57,26 +57,25 @@ func TestRunSudo(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestRunSudoCommandConstruction(t *testing.T) {
-	// Verify RunSudo correctly prepends "sudo" to the command
-	var capturedName string
-	var capturedArgs []string
+	t.Run("When constructing command, it correctly prepends sudo", func(t *testing.T) {
+		var capturedName string
+		var capturedArgs []string
 
-	mock := &MockRunner{
-		RunFunc: func(name string, args ...string) (string, error) {
-			capturedName = name
-			capturedArgs = args
-			return "mocked", nil
-		},
-	}
-	SetMockRunner(mock)
-	defer ClearMockRunner()
+		mock := &MockRunner{
+			RunFunc: func(name string, args ...string) (string, error) {
+				capturedName = name
+				capturedArgs = args
+				return "mocked", nil
+			},
+		}
+		SetMockRunner(mock)
+		defer ClearMockRunner()
 
-	_, err := RunSudo("echo", "hello", "world")
-	require.NoError(t, err)
+		_, err := RunSudo("echo", "hello", "world")
+		require.NoError(t, err)
 
-	assert.Equal(t, "sudo", capturedName)
-	assert.Equal(t, []string{"echo", "hello", "world"}, capturedArgs)
+		assert.Equal(t, "sudo", capturedName)
+		assert.Equal(t, []string{"echo", "hello", "world"}, capturedArgs)
+	})
 }

@@ -131,6 +131,13 @@ func TestSlackSend(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("When server is unreachable, it returns an error", func(t *testing.T) {
+		slack := NewSlack("http://localhost:1")
+		err := slack.Send(Incident{Title: "test", Service: "test", Severity: "p1"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send request")
+	})
 }
 
 func TestDiscordSend(t *testing.T) {
@@ -240,40 +247,73 @@ func TestDiscordSend(t *testing.T) {
 			}
 		})
 	}
-}
 
-func TestSendToUnreachableServer(t *testing.T) {
-	// Verify error handling when the server is unreachable
-	slack := NewSlack("http://localhost:1")
-	err := slack.Send(Incident{Title: "test", Service: "test", Severity: "p1"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to send request")
-
-	discord := NewDiscord("http://localhost:1")
-	err = discord.Send(Incident{Title: "test", Service: "test", Severity: "p1"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to send request")
+	t.Run("When server is unreachable, it returns an error", func(t *testing.T) {
+		discord := NewDiscord("http://localhost:1")
+		err := discord.Send(Incident{Title: "test", Service: "test", Severity: "p1"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send request")
+	})
 }
 
 func TestSeverityEmoji(t *testing.T) {
-	assert.Equal(t, "🔴", severityEmoji("p1"))
-	assert.Equal(t, "🟠", severityEmoji("p2"))
-	assert.Equal(t, "🟡", severityEmoji("p3"))
-	assert.Equal(t, "⚪", severityEmoji("unknown"))
-	assert.Equal(t, "⚪", severityEmoji(""))
+	t.Run("When severity is p1, it returns red circle", func(t *testing.T) {
+		assert.Equal(t, "🔴", severityEmoji("p1"))
+	})
+
+	t.Run("When severity is p2, it returns orange circle", func(t *testing.T) {
+		assert.Equal(t, "🟠", severityEmoji("p2"))
+	})
+
+	t.Run("When severity is p3, it returns yellow circle", func(t *testing.T) {
+		assert.Equal(t, "🟡", severityEmoji("p3"))
+	})
+
+	t.Run("When severity is unknown, it returns white circle", func(t *testing.T) {
+		assert.Equal(t, "⚪", severityEmoji("unknown"))
+	})
+
+	t.Run("When severity is empty, it returns white circle", func(t *testing.T) {
+		assert.Equal(t, "⚪", severityEmoji(""))
+	})
 }
 
 func TestSeverityLabel(t *testing.T) {
-	assert.Equal(t, "P1 - Critical", severityLabel("p1"))
-	assert.Equal(t, "P2 - High", severityLabel("p2"))
-	assert.Equal(t, "P3 - Medium", severityLabel("p3"))
-	assert.Equal(t, "info", severityLabel("info"))
-	assert.Equal(t, "", severityLabel(""))
+	t.Run("When severity is p1, it returns Critical", func(t *testing.T) {
+		assert.Equal(t, "P1 - Critical", severityLabel("p1"))
+	})
+
+	t.Run("When severity is p2, it returns High", func(t *testing.T) {
+		assert.Equal(t, "P2 - High", severityLabel("p2"))
+	})
+
+	t.Run("When severity is p3, it returns Medium", func(t *testing.T) {
+		assert.Equal(t, "P3 - Medium", severityLabel("p3"))
+	})
+
+	t.Run("When severity is unrecognized, it returns as-is", func(t *testing.T) {
+		assert.Equal(t, "info", severityLabel("info"))
+	})
+
+	t.Run("When severity is empty, it returns empty", func(t *testing.T) {
+		assert.Equal(t, "", severityLabel(""))
+	})
 }
 
 func TestDiscordSeverityColor(t *testing.T) {
-	assert.Equal(t, 0xDC3545, discordSeverityColor("p1"))
-	assert.Equal(t, 0xFD7E14, discordSeverityColor("p2"))
-	assert.Equal(t, 0xFFC107, discordSeverityColor("p3"))
-	assert.Equal(t, 0x6C757D, discordSeverityColor("unknown"))
+	t.Run("When severity is p1, it returns red", func(t *testing.T) {
+		assert.Equal(t, 0xDC3545, discordSeverityColor("p1"))
+	})
+
+	t.Run("When severity is p2, it returns orange", func(t *testing.T) {
+		assert.Equal(t, 0xFD7E14, discordSeverityColor("p2"))
+	})
+
+	t.Run("When severity is p3, it returns yellow", func(t *testing.T) {
+		assert.Equal(t, 0xFFC107, discordSeverityColor("p3"))
+	})
+
+	t.Run("When severity is unknown, it returns gray", func(t *testing.T) {
+		assert.Equal(t, 0x6C757D, discordSeverityColor("unknown"))
+	})
 }

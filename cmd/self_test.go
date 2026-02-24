@@ -80,91 +80,83 @@ func TestCompareVersions(t *testing.T) {
 }
 
 func TestGetLatestRelease(t *testing.T) {
-	// Create a mock GitHub API server
-	mockRelease := Release{
-		TagName: "v0.3.0",
-		Assets: []Asset{
-			{
-				Name:        fmt.Sprintf("arc-%s-%s", runtime.GOOS, runtime.GOARCH),
-				DownloadURL: "https://example.com/arc-linux-amd64",
+	t.Run("When API returns valid release, it parses correctly", func(t *testing.T) {
+		mockRelease := Release{
+			TagName: "v0.3.0",
+			Assets: []Asset{
+				{
+					Name:        fmt.Sprintf("arc-%s-%s", runtime.GOOS, runtime.GOARCH),
+					DownloadURL: "https://example.com/arc-linux-amd64",
+				},
 			},
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		expectedPath := fmt.Sprintf("/repos/%s/%s/releases/latest", githubOwner, githubRepo)
-		if r.URL.Path != expectedPath {
-			t.Errorf("Unexpected path: %s", r.URL.Path)
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockRelease)
-	}))
-	defer server.Close()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			expectedPath := fmt.Sprintf("/repos/%s/%s/releases/latest", githubOwner, githubRepo)
+			if r.URL.Path != expectedPath {
+				t.Errorf("Unexpected path: %s", r.URL.Path)
+				http.Error(w, "Not found", http.StatusNotFound)
+				return
+			}
 
-	// Temporarily override the GitHub API URL
-	originalAPI := githubAPI
-	githubAPI = server.URL
-	defer func() { githubAPI = originalAPI }()
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(mockRelease)
+		}))
+		defer server.Close()
 
-	// Test fetching the release
-	release, err := getLatestRelease()
-	require.NoError(t, err)
+		originalAPI := githubAPI
+		githubAPI = server.URL
+		defer func() { githubAPI = originalAPI }()
 
-	assert.Equal(t, "v0.3.0", release.TagName)
-	assert.Len(t, release.Assets, 1)
+		release, err := getLatestRelease()
+		require.NoError(t, err)
 
-	expectedAssetName := fmt.Sprintf("arc-%s-%s", runtime.GOOS, runtime.GOARCH)
-	assert.Equal(t, expectedAssetName, release.Assets[0].Name)
-}
+		assert.Equal(t, "v0.3.0", release.TagName)
+		assert.Len(t, release.Assets, 1)
 
-func TestGetLatestRelease_ErrorHandling(t *testing.T) {
-	// Test with a server that returns an error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "Not found", http.StatusNotFound)
-	}))
-	defer server.Close()
+		expectedAssetName := fmt.Sprintf("arc-%s-%s", runtime.GOOS, runtime.GOARCH)
+		assert.Equal(t, expectedAssetName, release.Assets[0].Name)
+	})
 
-	// Temporarily override the GitHub API URL
-	originalAPI := githubAPI
-	githubAPI = server.URL
-	defer func() { githubAPI = originalAPI }()
+	t.Run("When API returns error status, it returns an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Not found", http.StatusNotFound)
+		}))
+		defer server.Close()
 
-	// Test fetching the release should fail
-	_, err := getLatestRelease()
-	assert.Error(t, err)
+		originalAPI := githubAPI
+		githubAPI = server.URL
+		defer func() { githubAPI = originalAPI }()
+
+		_, err := getLatestRelease()
+		assert.Error(t, err)
+	})
 }
 
 func TestDownloadAndReplace(t *testing.T) {
-	// Create a temporary directory for testing
-	tmpDir := t.TempDir()
-	testBinaryPath := filepath.Join(tmpDir, "arc")
+	t.Run("When downloading valid binary, it replaces the file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		testBinaryPath := filepath.Join(tmpDir, "arc")
 
-	// Create a mock binary file
-	mockBinaryContent := []byte("mock binary content")
-	err := os.WriteFile(testBinaryPath, mockBinaryContent, 0755)
-	require.NoError(t, err, "Failed to create test binary")
+		mockBinaryContent := []byte("mock binary content")
+		err := os.WriteFile(testBinaryPath, mockBinaryContent, 0755)
+		require.NoError(t, err, "Failed to create test binary")
 
-	// Create a mock HTTP server that serves the binary
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Write(mockBinaryContent)
-	}))
-	defer server.Close()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(mockBinaryContent)
+		}))
+		defer server.Close()
 
-	// Test downloading and replacing
-	err = downloadAndReplace(testBinaryPath, server.URL)
-	require.NoError(t, err)
+		err = downloadAndReplace(testBinaryPath, server.URL)
+		require.NoError(t, err)
 
-	// Verify the file was replaced
-	content, err := os.ReadFile(testBinaryPath)
-	require.NoError(t, err, "Failed to read replaced binary")
-	assert.Equal(t, mockBinaryContent, content)
+		content, err := os.ReadFile(testBinaryPath)
+		require.NoError(t, err, "Failed to read replaced binary")
+		assert.Equal(t, mockBinaryContent, content)
 
-	// Verify file permissions
-	info, err := os.Stat(testBinaryPath)
-	require.NoError(t, err, "Failed to stat binary")
-	assert.NotZero(t, info.Mode().Perm()&0111, "binary should be executable")
+		info, err := os.Stat(testBinaryPath)
+		require.NoError(t, err, "Failed to stat binary")
+		assert.NotZero(t, info.Mode().Perm()&0111, "binary should be executable")
+	})
 }

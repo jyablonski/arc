@@ -6,7 +6,6 @@ import (
 
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestValidateCmd(t *testing.T) {
@@ -48,6 +47,15 @@ func TestValidateCmd(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "correctly categorizes required vs optional tools",
+			availableTools: map[string]bool{
+				"pacman": true, "systemctl": true, "lspci": true,
+				"dmidecode": true, "lshw": true, "git": true,
+				"gh": true, "uv": true,
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -70,25 +78,4 @@ func TestValidateCmd(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestValidateToolStatusCategories(t *testing.T) {
-	// Verify the command correctly categorizes required vs optional tools
-	mock := &shell.MockRunner{
-		CommandExistsFunc: func(name string) bool {
-			// Only required tools are available
-			required := map[string]bool{
-				"pacman": true, "systemctl": true, "lspci": true,
-				"dmidecode": true, "lshw": true, "git": true,
-				"gh": true, "uv": true,
-			}
-			return required[name]
-		},
-	}
-	shell.SetMockRunner(mock)
-	defer shell.ClearMockRunner()
-
-	// Should succeed even though optional tools (docker, yay, aws, etc.) are missing
-	err := validateCmd.RunE(validateCmd, []string{})
-	require.NoError(t, err)
 }
