@@ -70,71 +70,72 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 	return commands
 }
 
-func TestAllCommandsMatchExpectedList(t *testing.T) {
-	// Get all commands from the root command tree
-	allCommands := getAllCommands(rootCmd, "")
+func TestCommands(t *testing.T) {
+	t.Run("When comparing actual commands to expected list, they match", func(t *testing.T) {
+		// Get all commands from the root command tree
+		allCommands := getAllCommands(rootCmd, "")
 
-	// Sort for consistent comparison
-	sort.Strings(allCommands)
+		// Sort for consistent comparison
+		sort.Strings(allCommands)
 
-	// Create a map for easier lookup
-	expectedMap := make(map[string]bool)
-	for _, cmd := range expectedCommands {
-		expectedMap[cmd] = true
-	}
-
-	actualMap := make(map[string]bool)
-	for _, cmd := range allCommands {
-		actualMap[cmd] = true
-	}
-
-	// Find missing commands (in actual but not in expected)
-	var missing []string
-	for _, cmd := range allCommands {
-		if !expectedMap[cmd] {
-			missing = append(missing, cmd)
+		// Create a map for easier lookup
+		expectedMap := make(map[string]bool)
+		for _, cmd := range expectedCommands {
+			expectedMap[cmd] = true
 		}
-	}
 
-	// Find extra commands (in expected but not in actual)
-	var extra []string
-	for _, cmd := range expectedCommands {
-		if !actualMap[cmd] {
-			extra = append(extra, cmd)
+		actualMap := make(map[string]bool)
+		for _, cmd := range allCommands {
+			actualMap[cmd] = true
 		}
-	}
 
-	// Report any discrepancies
-	if len(missing) > 0 || len(extra) > 0 {
-		if len(missing) > 0 {
-			t.Errorf("Missing from expectedCommands (add these): %v", missing)
+		// Find missing commands (in actual but not in expected)
+		var missing []string
+		for _, cmd := range allCommands {
+			if !expectedMap[cmd] {
+				missing = append(missing, cmd)
+			}
 		}
-		if len(extra) > 0 {
-			t.Errorf("Extra in expectedCommands (remove these): %v", extra)
+
+		// Find extra commands (in expected but not in actual)
+		var extra []string
+		for _, cmd := range expectedCommands {
+			if !actualMap[cmd] {
+				extra = append(extra, cmd)
+			}
 		}
-		t.Errorf("Actual commands found: %v", allCommands)
-	}
-}
 
-func TestExpectedCommandsAreValid(t *testing.T) {
-	// Verify that all expected commands actually exist
-	allCommands := getAllCommands(rootCmd, "")
-	actualMap := make(map[string]bool)
-	for _, cmd := range allCommands {
-		actualMap[cmd] = true
-	}
+		// Report any discrepancies
+		if len(missing) > 0 || len(extra) > 0 {
+			if len(missing) > 0 {
+				t.Errorf("Missing from expectedCommands (add these): %v", missing)
+			}
+			if len(extra) > 0 {
+				t.Errorf("Extra in expectedCommands (remove these): %v", extra)
+			}
+			t.Errorf("Actual commands found: %v", allCommands)
+		}
+	})
 
-	for _, expectedCmd := range expectedCommands {
-		assert.True(t, actualMap[expectedCmd], "Expected command %q not found in actual commands", expectedCmd)
-	}
-}
+	t.Run("When checking expected commands exist, they are all found", func(t *testing.T) {
+		allCommands := getAllCommands(rootCmd, "")
+		actualMap := make(map[string]bool)
+		for _, cmd := range allCommands {
+			actualMap[cmd] = true
+		}
 
-func TestCommandPathsAreWellFormed(t *testing.T) {
-	allCommands := getAllCommands(rootCmd, "")
+		for _, expectedCmd := range expectedCommands {
+			assert.True(t, actualMap[expectedCmd], "Expected command %q not found in actual commands", expectedCmd)
+		}
+	})
 
-	for _, cmd := range allCommands {
-		require.NotEmpty(t, strings.TrimSpace(cmd), "Found empty command path")
-		assert.Equal(t, strings.TrimSpace(cmd), cmd, "Command %q has leading/trailing spaces", cmd)
-		assert.False(t, strings.Contains(cmd, "  "), "Command %q contains double spaces", cmd)
-	}
+	t.Run("When checking command paths, they are well-formed", func(t *testing.T) {
+		allCommands := getAllCommands(rootCmd, "")
+
+		for _, cmd := range allCommands {
+			require.NotEmpty(t, strings.TrimSpace(cmd), "Found empty command path")
+			assert.Equal(t, strings.TrimSpace(cmd), cmd, "Command %q has leading/trailing spaces", cmd)
+			assert.False(t, strings.Contains(cmd, "  "), "Command %q contains double spaces", cmd)
+		}
+	})
 }
