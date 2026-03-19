@@ -34,7 +34,7 @@ and cleaning the package cache with paccache -rv.`,
 
 		// Update keyring first to avoid signature issues
 		output.Info("Updating archlinux-keyring...")
-		if err := shell.RunInteractive("sudo", "pacman", "-Sy", "--needed", "archlinux-keyring"); err != nil {
+		if err := shell.RunInteractive("sudo", "pacman", "-Sy", "--needed", "--noconfirm", "archlinux-keyring"); err != nil {
 			return fmt.Errorf("keyring update failed: %w", err)
 		}
 
@@ -47,7 +47,7 @@ and cleaning the package cache with paccache -rv.`,
 
 		// Run pacman update
 		output.Info("Running pacman -Syu...")
-		if err := shell.RunInteractive("sudo", "pacman", "-Syu"); err != nil {
+		if err := shell.RunInteractive("sudo", "pacman", "-Syu", "--noconfirm"); err != nil {
 			return fmt.Errorf("pacman update failed: %w", err)
 		}
 
@@ -86,7 +86,7 @@ and cleaning the package cache with paccache -rv.`,
 		if !updateNoAUR {
 			if pacman.CheckYayAvailable() {
 				output.Info("Running yay -Syu --aur...")
-				if err := shell.RunInteractive("yay", "-Syu", "--aur"); err != nil {
+				if err := shell.RunInteractive("yay", "-Syu", "--aur", "--noconfirm", "--nocleanmenu", "--nodiffmenu", "--noeditmenu"); err != nil {
 					output.Warning(fmt.Sprintf("yay update failed: %v", err))
 				}
 			} else {

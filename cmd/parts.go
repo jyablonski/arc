@@ -27,19 +27,19 @@ Use --component to show only a specific component.`,
 			switch comp {
 			case "mobo":
 				output.Header("motherboard is")
-				output, err := shell.RunSudo("dmidecode", "-t", "2")
+				result, err := shell.RunSudo("dmidecode", "-t", "2")
 				if err != nil {
 					return fmt.Errorf("failed to get motherboard info: %w", err)
 				}
-				fmt.Println(output)
+				fmt.Println(result)
 
 			case "cpu":
 				output.Header("cpu is")
-				output, err := shell.RunSudo("dmidecode", "-t", "4")
+				result, err := shell.RunSudo("dmidecode", "-t", "4")
 				if err != nil {
 					return fmt.Errorf("failed to get CPU info: %w", err)
 				}
-				fmt.Println(output)
+				fmt.Println(result)
 
 			case "gpu":
 				output.Header("gpu is")
@@ -49,8 +49,10 @@ Use --component to show only a specific component.`,
 					return fmt.Errorf("failed to get GPU PCI info: %w", err)
 				}
 				lines := strings.Split(pciOutput, "\n")
+				found := false
 				for _, line := range lines {
 					if strings.Contains(line, " VGA ") {
+						found = true
 						parts := strings.Fields(line)
 						if len(parts) > 0 {
 							pciAddr := parts[0]
@@ -61,22 +63,25 @@ Use --component to show only a specific component.`,
 						}
 					}
 				}
+				if !found {
+					output.Warning("no VGA-compatible GPU found via lspci")
+				}
 
 			case "gpu-driver":
 				output.Header("gpu driver is")
-				output, err := shell.Run("nvidia-smi")
+				result, err := shell.Run("nvidia-smi")
 				if err != nil {
 					return fmt.Errorf("nvidia-smi failed: %w", err)
 				}
-				fmt.Println(output)
+				fmt.Println(result)
 
 			case "ram":
 				output.Header("ram is")
-				output, err := shell.RunSudo("lshw", "-C", "memory")
+				result, err := shell.RunSudo("lshw", "-C", "memory")
 				if err != nil {
 					return fmt.Errorf("failed to get RAM info: %w", err)
 				}
-				fmt.Println(output)
+				fmt.Println(result)
 
 			default:
 				return fmt.Errorf("unknown component: %s (valid: mobo, cpu, gpu, gpu-driver, ram)", comp)
