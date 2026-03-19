@@ -3,6 +3,7 @@ package pacman
 import (
 	"errors"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,11 +28,10 @@ func GetPackageCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if output == "" {
 		return 0, nil
 	}
-	return len(lines), nil
+	return len(strings.Split(strings.TrimSpace(output), "\n")), nil
 }
 
 // GetExplicitlyInstalledCount returns the count of explicitly installed packages
@@ -40,11 +40,10 @@ func GetExplicitlyInstalledCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if output == "" {
 		return 0, nil
 	}
-	return len(lines), nil
+	return len(strings.Split(strings.TrimSpace(output), "\n")), nil
 }
 
 // GetForeignPackageCount returns the count of foreign/AUR packages
@@ -53,11 +52,10 @@ func GetForeignPackageCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if output == "" {
 		return 0, nil
 	}
-	return len(lines), nil
+	return len(strings.Split(strings.TrimSpace(output), "\n")), nil
 }
 
 // GetExplicitlyInstalled returns a list of explicitly installed packages
@@ -93,11 +91,10 @@ func GetTotalInstalledSize() (float64, error) {
 
 	var totalMiB float64
 	lines := strings.Split(output, "\n")
+	re := regexp.MustCompile(`Installed Size\s+:\s+([\d.]+)\s+(KiB|MiB|GiB)`)
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "Installed Size") {
-			// Extract size and unit
-			re := regexp.MustCompile(`Installed Size\s+:\s+([\d.]+)\s+(KiB|MiB|GiB)`)
 			matches := re.FindStringSubmatch(line)
 			if len(matches) == 3 {
 				size, err := strconv.ParseFloat(matches[1], 64)
@@ -199,6 +196,7 @@ func GetLargestPackages(topN int) ([]PackageInfo, error) {
 
 	packages := make(map[string]PackageInfo)
 	lines := strings.Split(output, "\n")
+	re := regexp.MustCompile(`Installed Size\s+:\s+([\d.]+)\s+(KiB|MiB|GiB)`)
 	var currentName string
 
 	for _, line := range lines {
@@ -208,7 +206,6 @@ func GetLargestPackages(topN int) ([]PackageInfo, error) {
 				currentName = parts[2]
 			}
 		} else if strings.HasPrefix(line, "Installed Size") && currentName != "" {
-			re := regexp.MustCompile(`Installed Size\s+:\s+([\d.]+)\s+(KiB|MiB|GiB)`)
 			matches := re.FindStringSubmatch(line)
 			if len(matches) == 3 {
 				size, err := strconv.ParseFloat(matches[1], 64)
@@ -243,14 +240,9 @@ func GetLargestPackages(topN int) ([]PackageInfo, error) {
 		result = append(result, pkg)
 	}
 
-	// Simple sort by size (descending)
-	for i := 0; i < len(result)-1; i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[i].InstalledSize < result[j].InstalledSize {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].InstalledSize > result[j].InstalledSize
+	})
 
 	if topN > len(result) {
 		topN = len(result)

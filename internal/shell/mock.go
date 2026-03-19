@@ -19,8 +19,3 @@ func SetMockRunner(m *MockRunner) {
 func ClearMockRunner() {
 	mockRunner = nil
 }
-
-// getMockRunner returns the current mock runner (for testing)
-func getMockRunner() *MockRunner {
-	return mockRunner
-}
