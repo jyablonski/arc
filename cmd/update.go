@@ -86,7 +86,7 @@ and cleaning the package cache with paccache -rv.`,
 		if !updateNoAUR {
 			if pacman.CheckYayAvailable() {
 				output.Info("Running yay -Syu --aur...")
-				if err := shell.RunInteractive("yay", "-Syu", "--aur", "--noconfirm", "--nocleanmenu", "--nodiffmenu", "--noeditmenu"); err != nil {
+				if err := shell.RunInteractive("yay", "-Syu", "--aur", "--noconfirm", "--answerclean=None", "--answerdiff=None", "--answeredit=None"); err != nil {
 					output.Warning(fmt.Sprintf("yay update failed: %v", err))
 				}
 			} else {
