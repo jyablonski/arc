@@ -27,6 +27,10 @@ var ghRestartDashboardCmd = &cobra.Command{
 	Short: "Restart the dashboard GitHub workflow",
 	Long:  `Trigger the vm_cron_restart.yml workflow in the nba_elt_dashboard repository and wait for completion.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := ensureCommandEnabled(cmd); err != nil {
+			return err
+		}
+
 		if !shell.CommandExists("gh") {
 			return shell.NewErrToolNotAvailable("gh")
 		}
@@ -122,4 +126,5 @@ func waitForWorkflowCompletion(runID string) (status, conclusion string, err err
 func init() {
 	rootCmd.AddCommand(ghCmd)
 	ghCmd.AddCommand(ghRestartDashboardCmd)
+	configureAdminCommands()
 }

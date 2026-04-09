@@ -33,6 +33,7 @@ enable additional features.`,
 			{Name: "lshw", Required: true, Description: "Hardware lister (for RAM info)"},
 			{Name: "git", Required: true, Description: "Git version control"},
 			{Name: "gh", Required: true, Description: "GitHub CLI"},
+			{Name: "fastfetch", Required: true, Description: "System info tool (for arc info)"},
 			{Name: "uv", Required: true, Description: "Python package manager"},
 
 			// Optional tools
@@ -41,7 +42,6 @@ enable additional features.`,
 			{Name: "aws", Required: false, Description: "AWS CLI (for AWS commands)"},
 			{Name: "nvidia-smi", Required: false, Description: "NVIDIA driver (for GPU info)"},
 			{Name: "paccache", Required: false, Description: "Package cache cleaner"},
-			{Name: "gnome-shell", Required: false, Description: "GNOME shell (for system info)"},
 		}
 
 		// Check availability

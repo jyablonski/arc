@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/jyablonski/arc/internal/shell"
@@ -140,6 +141,7 @@ func TestWaitForWorkflowCompletion(t *testing.T) {
 func TestGhRestartDashboardCmd(t *testing.T) {
 	tests := []struct {
 		name        string
+		enabled     bool
 		mockRun     func(name string, args ...string) (string, error)
 		mockCmdExst func(name string) bool
 		expectError bool
@@ -147,7 +149,14 @@ func TestGhRestartDashboardCmd(t *testing.T) {
 		wantToolErr bool
 	}{
 		{
-			name: "gh not available",
+			name:        "command not enabled",
+			enabled:     false,
+			expectError: true,
+			errContains: `command "gh restart-dashboard" is not available`,
+		},
+		{
+			name:    "gh not available",
+			enabled: true,
 			mockCmdExst: func(name string) bool {
 				return false
 			},
@@ -155,7 +164,8 @@ func TestGhRestartDashboardCmd(t *testing.T) {
 			wantToolErr: true,
 		},
 		{
-			name: "workflow trigger fails",
+			name:    "workflow trigger fails",
+			enabled: true,
 			mockCmdExst: func(name string) bool {
 				return name == "gh"
 			},
@@ -169,6 +179,23 @@ func TestGhRestartDashboardCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			oldValue, hadValue := os.LookupEnv(extraCommandsEnvVar)
+			defer func() {
+				if hadValue {
+					_ = os.Setenv(extraCommandsEnvVar, oldValue)
+				} else {
+					_ = os.Unsetenv(extraCommandsEnvVar)
+				}
+				configureAdminCommands()
+			}()
+
+			if tt.enabled {
+				_ = os.Setenv(extraCommandsEnvVar, "1")
+			} else {
+				_ = os.Unsetenv(extraCommandsEnvVar)
+			}
+			configureAdminCommands()
+
 			mock := &shell.MockRunner{
 				RunFunc:           tt.mockRun,
 				CommandExistsFunc: tt.mockCmdExst,

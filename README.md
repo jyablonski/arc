@@ -64,7 +64,7 @@ arc self update
 | `update`    | System updates via pacman and yay  | `arc update --no-aur`          |
 | `clean`     | Remove cached packages and orphans | `arc clean --orphans-only`     |
 | `packages`  | Package stats and size info        | `arc packages --top 10 --json` |
-| `info`      | System information                 | `arc info --json`              |
+| `info`      | System information                 | `arc info`                     |
 | `parts`     | Hardware components                | `arc parts`                    |
 | `installed` | List installed packages            | `arc installed --aur-only`     |
 | `search`     | Search package repos               | `arc search neovim`            |
