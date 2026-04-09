@@ -90,3 +90,4 @@ config.local.*
 *.zip
 *.deb
 *.rpm
+.codex

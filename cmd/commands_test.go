@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -17,7 +18,6 @@ var expectedCommands = []string{
 	"aws",
 	"clean",
 	"docker clean",
-	"gh",
 	"git cleanup",
 	"incident [title]",
 	"info",
@@ -32,8 +32,6 @@ var expectedCommands = []string{
 	// AWS subcommands
 	"aws rotate-keys",
 	"aws whoami",
-	// GH subcommands
-	"gh restart-dashboard",
 	// Self subcommands
 	"self update",
 	// Update subcommands
@@ -60,8 +58,8 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 
 	// Recursively collect subcommands
 	for _, subcmd := range cmd.Commands() {
-		// Skip help and completion commands added by cobra
-		if subcmd.Use == "help" || subcmd.Use == "completion" {
+		// Skip help and completion commands added by cobra, plus hidden commands.
+		if subcmd.Use == "help" || subcmd.Use == "completion" || subcmd.Hidden {
 			continue
 		}
 		commands = append(commands, getAllCommands(subcmd, prefix)...)
@@ -72,6 +70,8 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 
 func TestCommands(t *testing.T) {
 	t.Run("When comparing actual commands to expected list, they match", func(t *testing.T) {
+		configureAdminCommands()
+
 		// Get all commands from the root command tree
 		allCommands := getAllCommands(rootCmd, "")
 
@@ -118,6 +118,8 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When checking expected commands exist, they are all found", func(t *testing.T) {
+		configureAdminCommands()
+
 		allCommands := getAllCommands(rootCmd, "")
 		actualMap := make(map[string]bool)
 		for _, cmd := range allCommands {
@@ -130,6 +132,8 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When checking command paths, they are well-formed", func(t *testing.T) {
+		configureAdminCommands()
+
 		allCommands := getAllCommands(rootCmd, "")
 
 		for _, cmd := range allCommands {
@@ -137,5 +141,29 @@ func TestCommands(t *testing.T) {
 			assert.Equal(t, strings.TrimSpace(cmd), cmd, "Command %q has leading/trailing spaces", cmd)
 			assert.False(t, strings.Contains(cmd, "  "), "Command %q contains double spaces", cmd)
 		}
+	})
+
+	t.Run("When admin commands are enabled, they are exposed", func(t *testing.T) {
+		oldValue, hadValue := os.LookupEnv(extraCommandsEnvVar)
+		defer func() {
+			if hadValue {
+				_ = os.Setenv(extraCommandsEnvVar, oldValue)
+			} else {
+				_ = os.Unsetenv(extraCommandsEnvVar)
+			}
+			configureAdminCommands()
+		}()
+
+		_ = os.Setenv(extraCommandsEnvVar, "1")
+		configureAdminCommands()
+
+		allCommands := getAllCommands(rootCmd, "")
+		actualMap := make(map[string]bool)
+		for _, cmd := range allCommands {
+			actualMap[cmd] = true
+		}
+
+		assert.True(t, actualMap["gh"])
+		assert.True(t, actualMap["gh restart-dashboard"])
 	})
 }

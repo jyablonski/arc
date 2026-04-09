@@ -14,7 +14,7 @@ var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Install required packages and tools",
 	Long: `Install required packages and tools needed for arc to function properly.
-This includes uv, gh (GitHub CLI), and other system utilities.`,
+This includes uv, gh (GitHub CLI), fastfetch, and other system utilities.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		output.Header("Setting up arc dependencies")
 
@@ -52,6 +52,12 @@ This includes uv, gh (GitHub CLI), and other system utilities.`,
 				description: "Git version control",
 				installCmd:  []string{"sudo", "pacman", "-S", "--noconfirm", "git"},
 				checkCmd:    "git",
+			},
+			{
+				name:        "fastfetch",
+				description: "System info tool (for arc info)",
+				installCmd:  []string{"sudo", "pacman", "-S", "--noconfirm", "fastfetch"},
+				checkCmd:    "fastfetch",
 			},
 		}
 

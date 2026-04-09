@@ -23,6 +23,8 @@ better argument handling, help text, colored output, and error handling.`,
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 func Execute() {
+	configureAdminCommands()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -19,7 +19,7 @@ func TestValidateCmd(t *testing.T) {
 			availableTools: map[string]bool{
 				"pacman": true, "systemctl": true, "lspci": true,
 				"dmidecode": true, "lshw": true, "git": true,
-				"gh": true, "uv": true,
+				"gh": true, "fastfetch": true, "uv": true,
 			},
 			expectError: false,
 		},
@@ -28,7 +28,7 @@ func TestValidateCmd(t *testing.T) {
 			availableTools: map[string]bool{
 				"pacman": true, "systemctl": true, "lspci": true,
 				"dmidecode": true, "lshw": true, "git": true,
-				"gh": true, "uv": false,
+				"gh": true, "fastfetch": true, "uv": false,
 			},
 			expectError: true,
 		},
@@ -42,7 +42,7 @@ func TestValidateCmd(t *testing.T) {
 			availableTools: map[string]bool{
 				"pacman": true, "systemctl": true, "lspci": true,
 				"dmidecode": true, "lshw": true, "git": true,
-				"gh": true, "uv": true,
+				"gh": true, "fastfetch": true, "uv": true,
 				// optional tools missing - should still pass
 			},
 			expectError: false,
@@ -52,7 +52,7 @@ func TestValidateCmd(t *testing.T) {
 			availableTools: map[string]bool{
 				"pacman": true, "systemctl": true, "lspci": true,
 				"dmidecode": true, "lshw": true, "git": true,
-				"gh": true, "uv": true,
+				"gh": true, "fastfetch": true, "uv": true,
 			},
 			expectError: false,
 		},
