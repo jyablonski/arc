@@ -8,10 +8,7 @@ import (
 	"strings"
 )
 
-// Run executes a command and returns its output
-// If a mock runner is set (in tests), it will use the mock instead
 func Run(name string, args ...string) (string, error) {
-	// Check if we have a mock runner set (for testing)
 	if mockRunner != nil && mockRunner.RunFunc != nil {
 		return mockRunner.RunFunc(name, args...)
 	}
@@ -29,14 +26,11 @@ func Run(name string, args ...string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// RunSudo executes a command with sudo and returns its output
 func RunSudo(name string, args ...string) (string, error) {
 	sudoArgs := append([]string{name}, args...)
 	return Run("sudo", sudoArgs...)
 }
 
-// RunInteractive executes a command that needs an interactive TTY
-// If a mock runner is set with RunInteractiveFunc, it will use the mock instead
 func RunInteractive(name string, args ...string) error {
 	if mockRunner != nil && mockRunner.RunInteractiveFunc != nil {
 		return mockRunner.RunInteractiveFunc(name, args...)
@@ -49,8 +43,6 @@ func RunInteractive(name string, args ...string) error {
 	return cmd.Run()
 }
 
-// CommandExists checks if a command exists in PATH
-// If a mock runner is set with CommandExistsFunc, it will use the mock instead
 func CommandExists(name string) bool {
 	if mockRunner != nil && mockRunner.CommandExistsFunc != nil {
 		return mockRunner.CommandExistsFunc(name)

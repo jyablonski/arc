@@ -11,10 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// expectedCommands is the canonical list of all available commands.
-// Update this list when adding new commands or subcommands.
 var expectedCommands = []string{
-	// Root-level commands
 	"aws",
 	"clean",
 	"docker clean",
@@ -29,24 +26,28 @@ var expectedCommands = []string{
 	"sleep",
 	"update",
 	"validate",
-	// AWS subcommands
 	"aws rotate-keys",
 	"aws whoami",
-	// Self subcommands
 	"self update",
-	// Update subcommands
 	"update uv",
+	"skills",
+	"skills add [path]",
+	"skills sync",
+	"skills list",
+	"skills validate [name]",
+	"skills remove <name>",
+	"skills prune",
+	"rules",
+	"rules sync",
+	"rules status",
 }
 
-// getAllCommands recursively collects all command paths from the root command
 func getAllCommands(cmd *cobra.Command, prefix string) []string {
 	var commands []string
 
-	// Skip the root command itself ("arc")
 	if cmd.Use == "arc" {
 		prefix = ""
 	} else {
-		// Build the full command path
 		if prefix != "" {
 			commands = append(commands, prefix+" "+cmd.Use)
 			prefix = prefix + " " + cmd.Use
@@ -56,9 +57,7 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 		}
 	}
 
-	// Recursively collect subcommands
 	for _, subcmd := range cmd.Commands() {
-		// Skip help and completion commands added by cobra, plus hidden commands.
 		if subcmd.Use == "help" || subcmd.Use == "completion" || subcmd.Hidden {
 			continue
 		}
@@ -72,13 +71,10 @@ func TestCommands(t *testing.T) {
 	t.Run("When comparing actual commands to expected list, they match", func(t *testing.T) {
 		configureAdminCommands()
 
-		// Get all commands from the root command tree
 		allCommands := getAllCommands(rootCmd, "")
 
-		// Sort for consistent comparison
 		sort.Strings(allCommands)
 
-		// Create a map for easier lookup
 		expectedMap := make(map[string]bool)
 		for _, cmd := range expectedCommands {
 			expectedMap[cmd] = true
@@ -89,7 +85,6 @@ func TestCommands(t *testing.T) {
 			actualMap[cmd] = true
 		}
 
-		// Find missing commands (in actual but not in expected)
 		var missing []string
 		for _, cmd := range allCommands {
 			if !expectedMap[cmd] {
@@ -97,7 +92,6 @@ func TestCommands(t *testing.T) {
 			}
 		}
 
-		// Find extra commands (in expected but not in actual)
 		var extra []string
 		for _, cmd := range expectedCommands {
 			if !actualMap[cmd] {
@@ -105,7 +99,6 @@ func TestCommands(t *testing.T) {
 			}
 		}
 
-		// Report any discrepancies
 		if len(missing) > 0 || len(extra) > 0 {
 			if len(missing) > 0 {
 				t.Errorf("Missing from expectedCommands (add these): %v", missing)
