@@ -7,10 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	// version is set at build time via ldflags
-	version = "dev"
-)
+var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:   "arc",
@@ -21,7 +18,6 @@ better argument handling, help text, colored output, and error handling.`,
 	Version: version,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
 func Execute() {
 	configureAdminCommands()
 

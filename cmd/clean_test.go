@@ -142,7 +142,6 @@ func TestCleanCmd(t *testing.T) {
 	}
 }
 
-// contains checks if a string slice contains a given string
 func contains(s []string, val string) bool {
 	for _, item := range s {
 		if strings.Contains(item, val) {
