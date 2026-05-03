@@ -121,7 +121,7 @@ func cursorGET(ctx context.Context, client *http.Client, path, userID, jwt strin
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("cursor API %s: %s — %s", url, resp.Status, truncate(string(b), 300))

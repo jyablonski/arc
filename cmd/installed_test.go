@@ -22,9 +22,10 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	require.NoError(t, w.Close())
 	os.Stdout = oldStdout
-	buf.ReadFrom(r)
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 
 	return buf.String()
 }

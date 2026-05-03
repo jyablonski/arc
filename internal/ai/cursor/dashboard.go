@@ -68,17 +68,17 @@ func connectPOST(ctx context.Context, client *http.Client, jwt, rpcPath string, 
 	if err != nil {
 		return 0, nil, fmt.Errorf("POST %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b, nil
 }
 
 func finitePositive(p *float64) bool {
-	return p != nil && !math.IsNaN(*p) && math.IsInf(*p, 0) == false && *p > 0
+	return p != nil && !math.IsNaN(*p) && !math.IsInf(*p, 0) && *p > 0
 }
 
 func finiteNumber(p *float64) bool {
-	return p != nil && !math.IsNaN(*p) && math.IsInf(*p, 0) == false
+	return p != nil && !math.IsNaN(*p) && !math.IsInf(*p, 0)
 }
 
 func parseBillingInstant(msStr string) *time.Time {

@@ -67,7 +67,7 @@ func (p *Provider) Usage(ctx context.Context) (ai.UsageReport, error) {
 	if err != nil {
 		return ai.UsageReport{}, fmt.Errorf("GET %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {

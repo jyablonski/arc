@@ -30,7 +30,7 @@ func ReadAccessTokenFromDB(dbPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("sqlite open: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	var val string
 	err = db.QueryRow(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken' LIMIT 1`).Scan(&val)

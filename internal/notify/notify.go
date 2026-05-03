@@ -157,7 +157,7 @@ func postJSON(client *http.Client, url string, payload interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Slack returns 200, Discord returns 204
 	if resp.StatusCode >= 300 {

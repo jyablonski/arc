@@ -100,7 +100,7 @@ func TestGetLatestRelease(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(mockRelease)
+			require.NoError(t, json.NewEncoder(w).Encode(mockRelease))
 		}))
 		defer server.Close()
 
@@ -144,7 +144,8 @@ func TestDownloadAndReplace(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/octet-stream")
-			w.Write(mockBinaryContent)
+			_, err := w.Write(mockBinaryContent)
+			require.NoError(t, err)
 		}))
 		defer server.Close()
 

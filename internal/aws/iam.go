@@ -144,7 +144,7 @@ func ValidateCredentials(accessKeyID, secretAccessKey string, maxRetries int) (s
 	testCmd.Env = filteredEnv
 	var stderr bytes.Buffer
 	testCmd.Stderr = &stderr
-	testCmd.Run() // Run again just to capture stderr
+	_ = testCmd.Run() // Run again just to capture stderr
 	errorMsg := stderr.String()
 	if errorMsg == "" {
 		errorMsg = validationErr.Error()
