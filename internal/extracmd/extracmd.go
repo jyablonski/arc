@@ -39,9 +39,7 @@ func NormalizeRelativePath(cmd *cobra.Command) string {
 	path := strings.TrimSpace(cmd.CommandPath())
 	root := cmd.Root().Name()
 	prefix := root + " "
-	if strings.HasPrefix(path, prefix) {
-		path = strings.TrimPrefix(path, prefix)
-	}
+	path = strings.TrimPrefix(path, prefix)
 	return strings.Join(strings.Fields(path), " ")
 }
 
