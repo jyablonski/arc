@@ -12,6 +12,8 @@ import (
 )
 
 var expectedCommands = []string{
+	"ai",
+	"ai usage",
 	"aws",
 	"clean",
 	"docker clean",

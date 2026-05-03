@@ -23,6 +23,13 @@ func Header(s string) {
 	fmt.Println(strings.Repeat("-", len(s)))
 }
 
+// SectionAccent prints a titled block with underline in the given ANSI style (stdout).
+func SectionAccent(title string, accent *color.Color) {
+	fmt.Println()
+	accent.Fprintf(os.Stdout, "%s\n", title)
+	accent.Fprintf(os.Stdout, "%s\n", strings.Repeat("─", len(title)))
+}
+
 func Success(s string) {
 	successColor.Printf("✓ %s\n", s)
 }
