@@ -25,6 +25,18 @@ func TestHeader(t *testing.T) {
 	})
 }
 
+func TestSectionAccent(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	stdout, _ := captureOutput(t, func() {
+		ac := color.New(color.FgGreen)
+		SectionAccent("Codex", ac)
+	})
+	assert.Contains(t, stdout, "Codex")
+	assert.Contains(t, stdout, "─────")
+}
+
 func TestSuccess(t *testing.T) {
 	t.Run("When called, it outputs checkmark with message", func(t *testing.T) {
 		color.NoColor = true
