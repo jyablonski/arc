@@ -66,23 +66,23 @@ arc update self
 
 ## Commands
 
-| Command           | Description                        | Example                            |
-| ----------------- | ---------------------------------- | ---------------------------------- |
-| `update system` | System updates via pacman and yay  | `arc update system --no-aur`       |
-| `update self`   | Update `arc` to the latest release | `arc update self`                  |
-| `update uv`     | Update the `uv` tool               | `arc update uv`                    |
-| `clean`         | Remove cached packages and orphans | `arc clean --orphans-only`         |
-| `packages`      | Package stats and size info        | `arc packages --top 10 --json`     |
-| `info`          | System information                 | `arc info`                         |
-| `parts`         | Hardware components                | `arc parts`                        |
-| `installed`     | List installed packages            | `arc installed --aur-only`         |
-| `search`        | Search package repos               | `arc search neovim`                |
-| `sleep`         | Suspend system                     | `arc sleep`                        |
-| `validate`      | Check dependencies                 | `arc validate`                     |
-| `setup`         | Install required tools             | `arc setup`                        |
-| `ai usage`      | Show AI coding tool usage          | `arc ai usage`                     |
-| `skills`        | Manage shared AI/LLM skills        | `arc skills sync`                  |
-| `rules`         | Manage shared AGENTS.md rules      | `arc rules sync`                   |
+| Command         | Description                        | Example                        |
+| --------------- | ---------------------------------- | ------------------------------ |
+| `update system` | System updates via pacman and yay  | `arc update system`            |
+| `update self`   | Update `arc` to the latest release | `arc update self`              |
+| `update uv`     | Update the `uv` tool               | `arc update uv`                |
+| `clean`         | Remove cached packages and orphans | `arc clean --orphans-only`     |
+| `packages`      | Package stats and size info        | `arc packages --top 10 --json` |
+| `info`          | System information                 | `arc info`                     |
+| `parts`         | Hardware components                | `arc parts`                    |
+| `installed`     | List installed packages            | `arc installed --aur-only`     |
+| `search`        | Search package repos               | `arc search neovim`            |
+| `sleep`         | Suspend system                     | `arc sleep`                    |
+| `validate`      | Check dependencies                 | `arc validate`                 |
+| `setup`         | Install required tools             | `arc setup`                    |
+| `ai usage`      | Show AI coding tool usage          | `arc ai usage`                 |
+| `skills`        | Manage shared AI/LLM skills        | `arc skills sync`              |
+| `rules`         | Manage shared AGENTS.md rules      | `arc rules sync`               |
 
 Use `arc <command> --help` for detailed flag information.
 
