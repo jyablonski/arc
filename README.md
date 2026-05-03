@@ -4,16 +4,18 @@ A personal CLI tool for system management and maintenance on Arch Linux.
 
 ## What It Does
 
-`arc` consolidates common system tasks into a single command-line tool.
-It provides a consistent interface for system operations with better argument handling, help text, colored output, and error handling.
-
-```bash
-arc update               # Run system updates (pacman, yay, cache cleanup)
-arc aws rotate-keys      # Rotate AWS IAM access keys
-arc docker clean         # Clean Docker resources (images, containers, volumes)
-```
+`arc` consolidates common system tasks into a single command-line tool. It provides a consistent interface for system operations with better argument handling, help text, colored output, and error handling.
 
 ## Why
+
+`arc` is for maintenance tasks that are too important or too fiddly to leave as one-off shell snippets.
+
+It wraps those workflows with:
+
+- Safer defaults and clearer failure messages
+- Consistent flags, JSON output, and help text
+- Reusable checks before running system-changing commands
+- One place to evolve personal Arch, Docker, AWS, and AI-tooling workflows
 
 Instead of remembering scattered commands or maintaining shell aliases:
 
@@ -21,10 +23,14 @@ Instead of remembering scattered commands or maintaining shell aliases:
 # Before
 sudo pacman -Syu && yay -Syu --aur && sudo paccache -rv
 pacman -Qi | awk '/^Name/ {name=$3} /^Installed Size/ {print $4, $5, name}' | sort -h | tail -25
+aws sts get-caller-identity && aws iam create-access-key --user-name "$USER" && aws configure
+# Check Claude, Codex, and Cursor usage separately
 
 # After
 arc update
 arc packages --top 25
+arc aws rotate-keys
+arc ai usage
 ```
 
 ## Installation
@@ -73,45 +79,19 @@ arc self update
 | `validate`    | Check dependencies                 | `arc validate`                 |
 | `setup`       | Install required tools             | `arc setup`                    |
 | `self update` | Update arc to the latest version   | `arc self update`              |
+| `ai usage`    | Show AI coding tool usage          | `arc ai usage`                 |
 | `skills`      | Manage shared AI/LLM skills        | `arc skills sync`              |
 | `rules`       | Manage shared AGENTS.md rules      | `arc rules sync`               |
 
 Use `arc <command> --help` for detailed flag information.
 
-### Shared AI skills
+## Additional Documentation
 
-`arc skills` manages a canonical `~/ai/skills/<name>/SKILL.md` store and symlinks each skill into every AI provider directory (Claude, Codex, Cursor, opencode).
-Validation of frontmatter is strict.
-Provider slots that already hold real content are never clobbered.
+More detailed notes are available in `docs/`:
 
-```bash
-# Promote a draft directory into canonical and link everywhere.
-arc skills add ./my-draft
-# Scaffold a new skill from a template.
-arc skills add --new my-skill
-# Migrate provider-local skills and forward-link (idempotent).
-arc skills sync
-# Show canonical skills and per-provider symlink status.
-arc skills list
-# Check frontmatter; auto-rename directory on name mismatch.
-arc skills validate --fix
-# Remove canonical copy and sweep provider symlinks (real content is left alone).
-arc skills remove my-skill
-# Remove only dangling symlinks.
-arc skills prune
-```
-
-### Shared rules file
-
-`arc rules` symlinks `~/ai/AGENTS.md` into each provider's rules-file slot (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`).
-
-```bash
-# Ensure symlinks are in place (creates parent directories as needed).
-arc rules sync
-
-# Show per-provider symlink status.
-arc rules status
-```
+- [AI usage](docs/ai_usage.md)
+- [Shared skills](docs/skills.md)
+- [Shared rules](docs/rules.md)
 
 ## Development
 

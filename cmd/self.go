@@ -105,7 +105,7 @@ func getLatestRelease() (*Release, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -136,10 +136,10 @@ func compareVersions(current, latest string) int {
 	for i := 0; i < maxLen; i++ {
 		var currentPart, latestPart int
 		if i < len(currentParts) {
-			fmt.Sscanf(currentParts[i], "%d", &currentPart)
+			_, _ = fmt.Sscanf(currentParts[i], "%d", &currentPart)
 		}
 		if i < len(latestParts) {
-			fmt.Sscanf(latestParts[i], "%d", &latestPart)
+			_, _ = fmt.Sscanf(latestParts[i], "%d", &latestPart)
 		}
 
 		if currentPart < latestPart {
@@ -161,7 +161,7 @@ func downloadAndReplace(execPath, downloadURL string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed with status %d", resp.StatusCode)
@@ -172,24 +172,24 @@ func downloadAndReplace(execPath, downloadURL string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	// Copy response body to file
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 
 	// Make executable
 	if err := os.Chmod(tempFile, 0755); err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 
 	// Replace the original binary
 	if err := os.Rename(tempFile, execPath); err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 

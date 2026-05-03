@@ -33,7 +33,7 @@ func ReadCredentials(credentialsPath string) (map[string]map[string]string, erro
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	profiles := make(map[string]map[string]string)
 	var currentProfile string
@@ -76,18 +76,28 @@ func WriteCredentials(credentialsPath string, profiles map[string]map[string]str
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	fileClosed := false
+	defer func() {
+		if !fileClosed {
+			_ = file.Close()
+		}
+	}()
 
 	writer := bufio.NewWriter(file)
-	defer writer.Flush()
 
 	// Write default profile first if it exists
 	if defaultProfile, exists := profiles["default"]; exists {
-		fmt.Fprintln(writer, "[default]")
-		for key, value := range defaultProfile {
-			fmt.Fprintf(writer, "%s = %s\n", key, value)
+		if _, err := fmt.Fprintln(writer, "[default]"); err != nil {
+			return err
 		}
-		fmt.Fprintln(writer)
+		for key, value := range defaultProfile {
+			if _, err := fmt.Fprintf(writer, "%s = %s\n", key, value); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintln(writer); err != nil {
+			return err
+		}
 		delete(profiles, "default")
 	}
 
@@ -96,14 +106,24 @@ func WriteCredentials(credentialsPath string, profiles map[string]map[string]str
 		if profileName == "default" {
 			continue
 		}
-		fmt.Fprintf(writer, "[%s]\n", profileName)
-		for key, value := range profile {
-			fmt.Fprintf(writer, "%s = %s\n", key, value)
+		if _, err := fmt.Fprintf(writer, "[%s]\n", profileName); err != nil {
+			return err
 		}
-		fmt.Fprintln(writer)
+		for key, value := range profile {
+			if _, err := fmt.Fprintf(writer, "%s = %s\n", key, value); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintln(writer); err != nil {
+			return err
+		}
 	}
 
-	return nil
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+	fileClosed = true
+	return file.Close()
 }
 
 // BackupCredentials creates a backup of the credentials file
@@ -114,18 +134,27 @@ func BackupCredentials(credentialsPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	backupFile, err := os.Create(backupPath)
 	if err != nil {
 		return "", err
 	}
-	defer backupFile.Close()
+	backupClosed := false
+	defer func() {
+		if !backupClosed {
+			_ = backupFile.Close()
+		}
+	}()
 
 	_, err = backupFile.ReadFrom(sourceFile)
 	if err != nil {
 		return "", err
 	}
 
+	if err := backupFile.Close(); err != nil {
+		return "", err
+	}
+	backupClosed = true
 	return backupPath, nil
 }

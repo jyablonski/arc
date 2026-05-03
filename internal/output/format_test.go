@@ -158,14 +158,16 @@ func captureOutput(t *testing.T, fn func()) (stdout string, stderr string) {
 
 	fn()
 
-	stdoutW.Close()
-	stderrW.Close()
+	require.NoError(t, stdoutW.Close())
+	require.NoError(t, stderrW.Close())
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 	color.Output = oldColorOutput
 
-	stdoutBuf.ReadFrom(stdoutR)
-	stderrBuf.ReadFrom(stderrR)
+	_, err = stdoutBuf.ReadFrom(stdoutR)
+	require.NoError(t, err)
+	_, err = stderrBuf.ReadFrom(stderrR)
+	require.NoError(t, err)
 
 	return stdoutBuf.String(), stderrBuf.String()
 }

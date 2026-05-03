@@ -757,9 +757,12 @@ func hashTree(root string) (map[string]string, error) {
 		}
 		h := sha256.New()
 		_, cerr := io.Copy(h, f)
-		f.Close()
+		closeErr := f.Close()
 		if cerr != nil {
 			return cerr
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
@@ -789,7 +792,7 @@ func contains(hay []string, needle string) bool {
 
 func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
 	if len(res.Skills) == 0 {
-		fmt.Fprintln(w, "no skills found in canonical dir")
+		_, _ = fmt.Fprintln(w, "no skills found in canonical dir")
 		return
 	}
 	headers := []string{"NAME", "CANONICAL"}
@@ -806,10 +809,10 @@ func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
 	}
 	output.Table(headers, rows)
 	if len(res.Conflicts) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Conflict backups (manual review):")
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Conflict backups (manual review):")
 		for _, c := range res.Conflicts {
-			fmt.Fprintf(w, "  %s (%s)\n", c.Path, c.Provider)
+			_, _ = fmt.Fprintf(w, "  %s (%s)\n", c.Path, c.Provider)
 		}
 	}
 }
