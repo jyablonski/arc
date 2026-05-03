@@ -1,5 +1,7 @@
 # arc AI Usage
 
+<img width="691" height="407" alt="Image" src="https://github.com/user-attachments/assets/16fb0381-8db3-440a-80e1-0a7440f96efc" />
+
 `arc ai usage` shows quota / usage for Claude Code (Anthropic), OpenAI Codex, and Cursor. Providers run **in parallel**; one failure does not block the others.
 
 **Authentication model:** `arc` does not log you into any provider (no passwords, OAuth browser flows, or sign-up APIs). It only **reads** credentials already on disk (or keychain) from **Claude Code**, the **Codex CLI**, or **Cursor**, or talks to a **local** `codex app-server` process that reads the same stores. Network traffic is **only** “call vendor usage surfaces with those saved tokens.”

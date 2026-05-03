@@ -27,13 +27,24 @@ repos:
       - id: go-mod-tidy
       - id: go-imports
 
+  # Go simplification
+  - repo: local
+    hooks:
+      - id: gofmt-s
+        name: gofmt -s
+        language: system
+        entry: gofmt -w -s
+        types: [go]
+
   # Go dead code detection
   - repo: local
     hooks:
       - id: deadcode
         name: deadcode
-        language: system
-        entry: bash -c 'out=$("$(go env GOPATH)/bin/deadcode" "$@"); [ -z "$out" ] || { echo "$out"; exit 1; }' --
+        language: golang
+        additional_dependencies:
+          - golang.org/x/tools/cmd/deadcode@v0.44.0
+        entry: deadcode
         args: [-test, ./...]
         pass_filenames: false
         types: [go]
