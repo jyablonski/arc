@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/aws"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/shell"
@@ -102,7 +103,7 @@ Automatically backs up old credentials and updates ~/.aws/credentials.`,
 
 		userArn, ok := identity["Arn"].(string)
 		if !ok {
-			return ErrNoUserARN
+			return arcerrs.ErrNoUserARN
 		}
 
 		username, err := aws.GetUsername(userArn)

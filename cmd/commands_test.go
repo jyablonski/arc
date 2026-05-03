@@ -6,10 +6,26 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/extracmd"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func isolateCommandTreeExtras(t *testing.T) {
+	t.Helper()
+	oldVal, had := os.LookupEnv(extracmd.EnvVar)
+	require.NoError(t, os.Unsetenv(extracmd.EnvVar))
+	extracmd.ApplyVisibility()
+	t.Cleanup(func() {
+		if had {
+			require.NoError(t, os.Setenv(extracmd.EnvVar, oldVal))
+		} else {
+			require.NoError(t, os.Unsetenv(extracmd.EnvVar))
+		}
+		extracmd.ApplyVisibility()
+	})
+}
 
 var expectedCommands = []string{
 	"ai",
@@ -23,14 +39,14 @@ var expectedCommands = []string{
 	"installed",
 	"packages",
 	"parts",
-	"self",
 	"setup",
 	"sleep",
 	"update",
+	"update self",
+	"update system",
 	"validate",
 	"aws rotate-keys",
 	"aws whoami",
-	"self update",
 	"update uv",
 	"skills",
 	"skills add [path]",
@@ -71,7 +87,7 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 
 func TestCommands(t *testing.T) {
 	t.Run("When comparing actual commands to expected list, they match", func(t *testing.T) {
-		configureAdminCommands()
+		isolateCommandTreeExtras(t)
 
 		allCommands := getAllCommands(rootCmd, "")
 
@@ -113,7 +129,7 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When checking expected commands exist, they are all found", func(t *testing.T) {
-		configureAdminCommands()
+		isolateCommandTreeExtras(t)
 
 		allCommands := getAllCommands(rootCmd, "")
 		actualMap := make(map[string]bool)
@@ -127,7 +143,7 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When checking command paths, they are well-formed", func(t *testing.T) {
-		configureAdminCommands()
+		isolateCommandTreeExtras(t)
 
 		allCommands := getAllCommands(rootCmd, "")
 
@@ -139,18 +155,18 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When admin commands are enabled, they are exposed", func(t *testing.T) {
-		oldValue, hadValue := os.LookupEnv(extraCommandsEnvVar)
+		oldValue, hadValue := os.LookupEnv(extracmd.EnvVar)
 		defer func() {
 			if hadValue {
-				_ = os.Setenv(extraCommandsEnvVar, oldValue)
+				_ = os.Setenv(extracmd.EnvVar, oldValue)
 			} else {
-				_ = os.Unsetenv(extraCommandsEnvVar)
+				_ = os.Unsetenv(extracmd.EnvVar)
 			}
-			configureAdminCommands()
+			extracmd.ApplyVisibility()
 		}()
 
-		_ = os.Setenv(extraCommandsEnvVar, "1")
-		configureAdminCommands()
+		_ = os.Setenv(extracmd.EnvVar, "1")
+		extracmd.ApplyVisibility()
 
 		allCommands := getAllCommands(rootCmd, "")
 		actualMap := make(map[string]bool)

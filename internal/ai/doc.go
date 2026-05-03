@@ -1,2 +1,2 @@
-// Package ai aggregates Claude, Codex, and Cursor usage; tokens stay in provider stores only.
+// Package ai runs usage queries across Claude, Codex, and Cursor.
 package ai

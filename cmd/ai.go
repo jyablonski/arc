@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/jyablonski/arc/internal/ai"
@@ -44,11 +42,11 @@ func runAIUsage(cmd *cobra.Command, args []string) error {
 	_ = args
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	filters := parseProviderCSV(aiUsageProvider)
+	filters := ai.ParseProviderCSV(aiUsageProvider)
 	if aiUsageProvider != "" && len(filters) == 0 {
 		return fmt.Errorf("--provider: empty after parsing")
 	}
-	if err := validateProviderFilters(filters); err != nil {
+	if err := ai.ValidateProviderFilters(filters); err != nil {
 		return err
 	}
 
@@ -63,10 +61,10 @@ func runAIUsage(cmd *cobra.Command, args []string) error {
 	if useCache {
 		if cached, ok, err := ai.ReadCache(now); err == nil && ok {
 			if jsonOut {
-				return encodeAIUsageJSON(os.Stdout, cached)
+				return aiExitJSON(os.Stdout, cached)
 			}
 			presentation.PrintAggregate(cached)
-			return exitCodeForAIUsage(cached)
+			return ai.ExitErrorIfAllProvidersFailed(cached)
 		}
 	}
 
@@ -78,61 +76,17 @@ func runAIUsage(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonOut {
-		if err := encodeAIUsageJSON(os.Stdout, agg); err != nil {
-			return err
-		}
-		return exitCodeForAIUsage(agg)
+		return aiExitJSON(os.Stdout, agg)
 	}
 	presentation.PrintAggregate(agg)
-	return exitCodeForAIUsage(agg)
+	return ai.ExitErrorIfAllProvidersFailed(agg)
 }
 
-func parseProviderCSV(s string) []string {
-	if strings.TrimSpace(s) == "" {
-		return nil
+func aiExitJSON(w io.Writer, agg ai.AggregateReport) error {
+	if err := ai.EncodeAggregateJSON(w, agg); err != nil {
+		return err
 	}
-	parts := strings.Split(s, ",")
-	var out []string
-	for _, p := range parts {
-		p = strings.TrimSpace(strings.ToLower(p))
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-func validateProviderFilters(filters []string) error {
-	known := map[string]struct{}{"claude": {}, "codex": {}, "cursor": {}}
-	for _, f := range filters {
-		if _, ok := known[f]; !ok {
-			return fmt.Errorf("unknown provider %q (claude, codex, cursor)", f)
-		}
-	}
-	return nil
-}
-
-func encodeAIUsageJSON(w io.Writer, agg ai.AggregateReport) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(agg)
-}
-
-func exitCodeForAIUsage(agg ai.AggregateReport) error {
-	if len(agg.Providers) == 0 {
-		return fmt.Errorf("no providers selected")
-	}
-	anyOK := false
-	for _, p := range agg.Providers {
-		if p.OK {
-			anyOK = true
-			break
-		}
-	}
-	if !anyOK {
-		return ai.CombineErrors(agg)
-	}
-	return nil
+	return ai.ExitErrorIfAllProvidersFailed(agg)
 }
 
 func init() {

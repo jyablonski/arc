@@ -27,7 +27,7 @@ aws sts get-caller-identity && aws iam create-access-key --user-name "$USER" && 
 # Check Claude, Codex, and Cursor usage separately
 
 # After
-arc update
+arc update system
 arc packages --top 25
 arc aws rotate-keys
 arc ai usage
@@ -58,30 +58,31 @@ cd arc
 make install
 ```
 
-Starting from version 0.3.0, if you already have `arc` installed, you can update it using:
+Starting from version 0.4.0, if you already have `arc` installed, you can update the binary with:
 
 ```bash
-arc self update
+arc update self
 ```
 
 ## Commands
 
-| Command       | Description                        | Example                        |
-| ------------- | ---------------------------------- | ------------------------------ |
-| `update`      | System updates via pacman and yay  | `arc update --no-aur`          |
-| `clean`       | Remove cached packages and orphans | `arc clean --orphans-only`     |
-| `packages`    | Package stats and size info        | `arc packages --top 10 --json` |
-| `info`        | System information                 | `arc info`                     |
-| `parts`       | Hardware components                | `arc parts`                    |
-| `installed`   | List installed packages            | `arc installed --aur-only`     |
-| `search`      | Search package repos               | `arc search neovim`            |
-| `sleep`       | Suspend system                     | `arc sleep`                    |
-| `validate`    | Check dependencies                 | `arc validate`                 |
-| `setup`       | Install required tools             | `arc setup`                    |
-| `self update` | Update arc to the latest version   | `arc self update`              |
-| `ai usage`    | Show AI coding tool usage          | `arc ai usage`                 |
-| `skills`      | Manage shared AI/LLM skills        | `arc skills sync`              |
-| `rules`       | Manage shared AGENTS.md rules      | `arc rules sync`               |
+| Command         | Description                        | Example                        |
+| --------------- | ---------------------------------- | ------------------------------ |
+| `update system` | System updates via pacman and yay  | `arc update system`            |
+| `update self`   | Update `arc` to the latest release | `arc update self`              |
+| `update uv`     | Update the `uv` tool               | `arc update uv`                |
+| `clean`         | Remove cached packages and orphans | `arc clean --orphans-only`     |
+| `packages`      | Package stats and size info        | `arc packages --top 10 --json` |
+| `info`          | System information                 | `arc info`                     |
+| `parts`         | Hardware components                | `arc parts`                    |
+| `installed`     | List installed packages            | `arc installed --aur-only`     |
+| `search`        | Search package repos               | `arc search neovim`            |
+| `sleep`         | Suspend system                     | `arc sleep`                    |
+| `validate`      | Check dependencies                 | `arc validate`                 |
+| `setup`         | Install required tools             | `arc setup`                    |
+| `ai usage`      | Show AI coding tool usage          | `arc ai usage`                 |
+| `skills`        | Manage shared AI/LLM skills        | `arc skills sync`              |
+| `rules`         | Manage shared AGENTS.md rules      | `arc rules sync`               |
 
 Use `arc <command> --help` for detailed flag information.
 
@@ -111,16 +112,22 @@ make lint      # Run linter
 ├── go.sum
 ├── cmd/
 │   ├── root.go           # root command, global flags
-│   ├── update.go         # system updates (pacman, yay, cache cleanup)
+│   ├── update.go         # arc update {system,self,uv}
 │   ├── clean.go          # package cache and orphan removal
-│   ├── ...               # each arc command gets its own file here
+│   ├── ...               # one file per command group (Cobra wiring only)
 ├── internal/
+│   ├── arcerrs/          # shared sentinel errors for CLI exit behavior
+│   ├── extracmd/         # ARC_EXTRA_COMMANDS visibility for admin-only commands
 │   ├── shell/
 │   │   └── exec.go       # wrapper for running shell commands
 │   ├── output/
 │   │   └── format.go     # manages colored output, tables, formatting
 │   ├── pacman/
-│   │   └── pacman.go     # pacman-specific parsing and helpers
+│   │   └── pacman.go     # pacman-specific parsing and helpers (+ kernel list)
+│   ├── selfupdate/       # arc update self
+│   ├── sysupdate/        # arc update system
+│   ├── ghworkflow/       # arc gh restart-dashboard
+│   ├── gitcleanup/       # arc git cleanup
 │   └── skills/           # shared AI skills, provider paths, sync, validation
 ```
 

@@ -22,7 +22,7 @@ repos:
 
   # Go formatting
   - repo: https://github.com/tekwizely/pre-commit-golang
-    rev: v1.0.0-rc.1
+    rev: v1.0.0-rc.4
     hooks:
       - id: go-mod-tidy
       - id: go-imports
@@ -35,6 +35,13 @@ repos:
         language: system
         entry: gofmt -w -s
         types: [go]
+
+  # Matches .github/workflows/quality-go.yaml (golangci/golangci-lint-action)
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.12.1
+    hooks:
+      - id: golangci-lint-full
+        entry: golangci-lint run --timeout=5m ./...
 
   # Go dead code detection
   - repo: local

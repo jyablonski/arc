@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/spf13/cobra"
@@ -37,11 +38,11 @@ enable additional features.`,
 			{Name: "uv", Required: true, Description: "Python package manager"},
 
 			// Optional tools
-			{Name: "yay", Required: false, Description: "AUR helper (for AUR updates)"},
+			{Name: "yay", Required: false, Description: "AUR helper (for arc update system)"},
 			{Name: "docker", Required: false, Description: "Docker (for docker clean command)"},
 			{Name: "aws", Required: false, Description: "AWS CLI (for AWS commands)"},
 			{Name: "nvidia-smi", Required: false, Description: "NVIDIA driver (for GPU info)"},
-			{Name: "paccache", Required: false, Description: "Package cache cleaner"},
+			{Name: "paccache", Required: false, Description: "Package cache cleaner (arc update system)"},
 		}
 
 		// Check availability
@@ -90,7 +91,7 @@ enable additional features.`,
 		} else {
 			output.Error("Some required tools are missing!")
 			output.Info("Run 'arc setup' to install missing dependencies")
-			return ErrValidationFailed
+			return arcerrs.ErrValidationFailed
 		}
 	},
 }

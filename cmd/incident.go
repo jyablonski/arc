@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/notify"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/spf13/cobra"
@@ -14,29 +14,6 @@ var (
 	incidentSeverity string
 	incidentDiscord  bool
 )
-
-// buildNotifiers reads webhook URLs from environment variables and returns
-// configured notifiers. Slack is always required. Discord is included only
-// when includeDiscord is true.
-func buildNotifiers(includeDiscord bool) ([]notify.Notifier, error) {
-	var notifiers []notify.Notifier
-
-	slackURL := os.Getenv("SLACK_WEBHOOK_URL")
-	if slackURL == "" {
-		return nil, ErrSlackWebhookNotSet
-	}
-	notifiers = append(notifiers, notify.NewSlack(slackURL))
-
-	if includeDiscord {
-		discordURL := os.Getenv("DISCORD_WEBHOOK_URL")
-		if discordURL == "" {
-			return nil, ErrDiscordWebhookNotSet
-		}
-		notifiers = append(notifiers, notify.NewDiscord(discordURL))
-	}
-
-	return notifiers, nil
-}
 
 var incidentCmd = &cobra.Command{
 	Use:   "incident [title]",
@@ -57,12 +34,12 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		title := args[0]
 
-		notifiers, err := buildNotifiers(incidentDiscord)
+		notifiers, err := notify.NotifiersFromEnv(incidentDiscord)
 		if err != nil {
 			return err
 		}
 
-		incident := notify.Incident{
+		inc := notify.Incident{
 			Title:    title,
 			Service:  incidentService,
 			Severity: incidentSeverity,
@@ -72,7 +49,7 @@ Examples:
 
 		var sendErrors []error
 		for _, n := range notifiers {
-			if err := n.Send(incident); err != nil {
+			if err := n.Send(inc); err != nil {
 				output.Warning(fmt.Sprintf("Failed to send to %s: %v", n.Name(), err))
 				sendErrors = append(sendErrors, err)
 			} else {
@@ -81,7 +58,7 @@ Examples:
 		}
 
 		if len(sendErrors) == len(notifiers) {
-			return ErrAllNotifiersFailed
+			return arcerrs.ErrAllNotifiersFailed
 		}
 
 		return nil

@@ -1,4 +1,4 @@
-package cmd
+package selfupdate
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,62 +20,21 @@ func TestCompareVersions(t *testing.T) {
 		name     string
 		current  string
 		latest   string
-		expected int // -1 if current < latest, 0 if equal, 1 if current > latest
+		expected int
 	}{
-		{
-			name:     "current is older",
-			current:  "v0.1.0",
-			latest:   "v0.2.0",
-			expected: -1,
-		},
-		{
-			name:     "current is newer",
-			current:  "v0.3.0",
-			latest:   "v0.2.0",
-			expected: 1,
-		},
-		{
-			name:     "versions are equal",
-			current:  "v0.2.0",
-			latest:   "v0.2.0",
-			expected: 0,
-		},
-		{
-			name:     "current without v prefix",
-			current:  "0.1.0",
-			latest:   "v0.2.0",
-			expected: -1,
-		},
-		{
-			name:     "latest without v prefix",
-			current:  "v0.1.0",
-			latest:   "0.2.0",
-			expected: -1,
-		},
-		{
-			name:     "patch version difference",
-			current:  "v0.2.0",
-			latest:   "v0.2.1",
-			expected: -1,
-		},
-		{
-			name:     "minor version difference",
-			current:  "v0.2.0",
-			latest:   "v0.3.0",
-			expected: -1,
-		},
-		{
-			name:     "major version difference",
-			current:  "v0.2.0",
-			latest:   "v1.0.0",
-			expected: -1,
-		},
+		{name: "current is older", current: "v0.1.0", latest: "v0.2.0", expected: -1},
+		{name: "current is newer", current: "v0.3.0", latest: "v0.2.0", expected: 1},
+		{name: "versions are equal", current: "v0.2.0", latest: "v0.2.0", expected: 0},
+		{name: "current without v prefix", current: "0.1.0", latest: "v0.2.0", expected: -1},
+		{name: "latest without v prefix", current: "v0.1.0", latest: "0.2.0", expected: -1},
+		{name: "patch version difference", current: "v0.2.0", latest: "v0.2.1", expected: -1},
+		{name: "minor version difference", current: "v0.2.0", latest: "v0.3.0", expected: -1},
+		{name: "major version difference", current: "v0.2.0", latest: "v1.0.0", expected: -1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := compareVersions(tt.current, tt.latest)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, CompareVersions(tt.current, tt.latest))
 		})
 	}
 }
@@ -92,7 +52,7 @@ func TestGetLatestRelease(t *testing.T) {
 		}
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			expectedPath := fmt.Sprintf("/repos/%s/%s/releases/latest", githubOwner, githubRepo)
+			expectedPath := fmt.Sprintf("/repos/%s/%s/releases/latest", DefaultOwner, DefaultRepo)
 			if r.URL.Path != expectedPath {
 				t.Errorf("Unexpected path: %s", r.URL.Path)
 				http.Error(w, "Not found", http.StatusNotFound)
@@ -104,11 +64,8 @@ func TestGetLatestRelease(t *testing.T) {
 		}))
 		defer server.Close()
 
-		originalAPI := githubAPI
-		githubAPI = server.URL
-		defer func() { githubAPI = originalAPI }()
-
-		release, err := getLatestRelease()
+		u := &Updater{Owner: DefaultOwner, Repo: DefaultRepo, APIBase: server.URL}
+		release, err := u.GetLatestRelease()
 		require.NoError(t, err)
 
 		assert.Equal(t, "v0.3.0", release.TagName)
@@ -124,11 +81,8 @@ func TestGetLatestRelease(t *testing.T) {
 		}))
 		defer server.Close()
 
-		originalAPI := githubAPI
-		githubAPI = server.URL
-		defer func() { githubAPI = originalAPI }()
-
-		_, err := getLatestRelease()
+		u := &Updater{Owner: DefaultOwner, Repo: DefaultRepo, APIBase: server.URL}
+		_, err := u.GetLatestRelease()
 		assert.Error(t, err)
 	})
 }
@@ -149,7 +103,7 @@ func TestDownloadAndReplace(t *testing.T) {
 		}))
 		defer server.Close()
 
-		err = downloadAndReplace(testBinaryPath, server.URL)
+		err = DownloadAndReplace(testBinaryPath, server.URL)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(testBinaryPath)
@@ -160,4 +114,10 @@ func TestDownloadAndReplace(t *testing.T) {
 		require.NoError(t, err, "Failed to stat binary")
 		assert.NotZero(t, info.Mode().Perm()&0111, "binary should be executable")
 	})
+}
+
+func TestUpgrade_devVersionIsNoop(t *testing.T) {
+	var b strings.Builder
+	require.NoError(t, New().Upgrade(&b, "dev"))
+	assert.Empty(t, b.String())
 }
