@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 )
@@ -72,7 +73,7 @@ func TestValidateCmd(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.True(t, errors.Is(err, ErrValidationFailed))
+				assert.True(t, errors.Is(err, arcerrs.ErrValidationFailed))
 			} else {
 				assert.NoError(t, err)
 			}

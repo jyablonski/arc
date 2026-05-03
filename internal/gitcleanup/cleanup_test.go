@@ -1,10 +1,11 @@
-package cmd
+package gitcleanup
 
 import (
 	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 )
@@ -70,7 +71,7 @@ func TestFilterMergedBranches(t *testing.T) {
 	}
 }
 
-func TestGitCmd(t *testing.T) {
+func TestRun(t *testing.T) {
 	tests := []struct {
 		name        string
 		mockRun     func(name string, args ...string) (string, error)
@@ -100,7 +101,7 @@ func TestGitCmd(t *testing.T) {
 				return "", nil
 			},
 			expectError: true,
-			wantErr:     ErrNotGitRepo,
+			wantErr:     arcerrs.ErrNotGitRepo,
 		},
 		{
 			name: "successful cleanup with merged branches",
@@ -170,7 +171,7 @@ func TestGitCmd(t *testing.T) {
 			shell.SetMockRunner(mock)
 			defer shell.ClearMockRunner()
 
-			err := gitCmd.RunE(gitCmd, []string{})
+			err := Run()
 
 			if tt.expectError {
 				assert.Error(t, err)

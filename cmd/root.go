@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jyablonski/arc/internal/extracmd"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,7 @@ better argument handling, help text, colored output, and error handling.`,
 }
 
 func Execute() {
-	configureAdminCommands()
+	extracmd.ApplyVisibility()
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -23,7 +23,6 @@ const (
 
 var faintColor = color.New(color.Faint)
 
-// PrintAggregate renders provider usage tables to stdout (colors, bars, reset times).
 func PrintAggregate(agg ai.AggregateReport) {
 	oldOut := color.Output
 	color.Output = os.Stdout
