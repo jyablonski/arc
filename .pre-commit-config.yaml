@@ -36,6 +36,14 @@ repos:
         entry: gofmt -w -s
         types: [go]
 
+      # Regenerates internal/*_moq.go from //go:generate go tool moq (see Makefile mocks)
+      - id: go-generate-moq
+        name: go generate (moq)
+        language: system
+        entry: bash -c 'go generate ./...'
+        pass_filenames: false
+        files: ^(internal/.*\.go|go\.mod|go\.sum)$
+
   # Matches .github/workflows/quality-go.yaml (golangci/golangci-lint-action)
   - repo: https://github.com/golangci/golangci-lint
     rev: v2.12.1

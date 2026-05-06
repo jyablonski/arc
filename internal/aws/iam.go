@@ -97,11 +97,27 @@ func DeleteAccessKey(username, keyID string) error {
 	return err
 }
 
+type stsValidateFunc func(filteredEnv []string) (stdout string, stderr string, err error)
+
+func execSTSGetCallerIdentity(filteredEnv []string) (stdout string, stderr string, err error) {
+	cmd := exec.Command("aws", "sts", "get-caller-identity")
+	cmd.Env = filteredEnv
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	return outBuf.String(), errBuf.String(), err
+}
+
+var stsCaller stsValidateFunc = execSTSGetCallerIdentity
+
 // ValidateCredentials validates credentials by testing them with sts get-caller-identity
 func ValidateCredentials(accessKeyID, secretAccessKey string, maxRetries int) (string, error) {
-	// Prepare environment with new credentials
+	return validateCredentialsWith(accessKeyID, secretAccessKey, maxRetries, stsCaller)
+}
+
+func validateCredentialsWith(accessKeyID, secretAccessKey string, maxRetries int, runSTS stsValidateFunc) (string, error) {
 	testEnv := os.Environ()
-	// Remove existing AWS credential env vars
 	filteredEnv := make([]string, 0, len(testEnv))
 	for _, env := range testEnv {
 		if !strings.HasPrefix(env, "AWS_ACCESS_KEY_ID=") &&
@@ -110,44 +126,27 @@ func ValidateCredentials(accessKeyID, secretAccessKey string, maxRetries int) (s
 			filteredEnv = append(filteredEnv, env)
 		}
 	}
-	// Add new credentials as env vars
 	filteredEnv = append(filteredEnv,
 		fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", accessKeyID),
 		fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", secretAccessKey),
 	)
 
-	// Retry validation with delays (AWS credentials may need time to propagate)
-	var testOutput string
-	var validationErr error
+	var lastOut, lastErr string
+	var lastRunErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if attempt > 1 {
 			time.Sleep(4 * time.Second)
 		}
 
-		testCmd := exec.Command("aws", "sts", "get-caller-identity")
-		testCmd.Env = filteredEnv
-
-		// Capture both stdout and stderr for better error messages
-		var stdout, stderr bytes.Buffer
-		testCmd.Stdout = &stdout
-		testCmd.Stderr = &stderr
-
-		validationErr = testCmd.Run()
-		if validationErr == nil {
-			testOutput = stdout.String()
-			return testOutput, nil
+		lastOut, lastErr, lastRunErr = runSTS(filteredEnv)
+		if lastRunErr == nil {
+			return lastOut, nil
 		}
 	}
 
-	// Get error message from last attempt
-	testCmd := exec.Command("aws", "sts", "get-caller-identity")
-	testCmd.Env = filteredEnv
-	var stderr bytes.Buffer
-	testCmd.Stderr = &stderr
-	_ = testCmd.Run() // Run again just to capture stderr
-	errorMsg := stderr.String()
-	if errorMsg == "" {
-		errorMsg = validationErr.Error()
+	errorMsg := lastErr
+	if errorMsg == "" && lastRunErr != nil {
+		errorMsg = lastRunErr.Error()
 	}
 
 	return "", fmt.Errorf("validation failed after %d attempts: %s", maxRetries, errorMsg)

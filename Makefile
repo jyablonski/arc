@@ -1,4 +1,4 @@
-.PHONY: build install clean test test-ci coverage coverage-html fmt lint help release
+.PHONY: build install clean test test-ci coverage coverage-app coverage-html fmt lint help release
 
 # Binary name
 BINARY_NAME=arc
@@ -43,7 +43,7 @@ uninstall: ## Remove arc from ~/.local/bin
 clean: ## Remove the built binary and coverage files
 	@echo "Cleaning build artifacts..."
 	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
-	@rm -f coverage.out test-results.xml
+	@rm -f coverage.out coverage.full.out coverage.app.out test-results.xml
 	@echo "Clean complete"
 
 test: ## Run tests with gotestsum (install: go install gotest.tools/gotestsum@latest)
@@ -52,29 +52,46 @@ test: ## Run tests with gotestsum (install: go install gotest.tools/gotestsum@la
 
 test-ci: ## Run tests with coverage and JUnit output (for CI)
 	@echo "Running tests with coverage..."
-	gotestsum --format testdox --junitfile test-results.xml -- -race -coverprofile=coverage.out ./...
+	gotestsum --format testdox --junitfile test-results.xml -- -race -coverprofile=coverage.full.out ./...
+	@awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out
+	@cp coverage.app.out coverage.out
 	@echo ""
-	@echo "Coverage by function:"
+	@echo "Statement coverage (product code, *_moq.go excluded):"
 	@go tool cover -func=coverage.out | tail -1
-	@echo "Coverage profile saved to coverage.out"
+	@echo "coverage.out = filtered (same as coverage.app.out); coverage.full.out = unfiltered"
 
-coverage: ## Generate and display test coverage report
+coverage: ## Generate and display test coverage report (filtered; raw in coverage.full.out)
 	@echo "Generating coverage profile..."
-	@go test -coverprofile=coverage.out ./...
+	@go test -coverprofile=coverage.full.out ./...
+	@awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out
+	@cp coverage.app.out coverage.out
 	@echo ""
-	@echo "Coverage by function:"
+	@echo "Coverage by function (product code, moq stubs excluded):"
 	@go tool cover -func=coverage.out
 	@echo ""
-	@echo "Coverage profile saved to coverage.out"
+	@echo "Coverage profile saved to coverage.out (filtered). Full: coverage.full.out"
 	@echo "Run 'make coverage-html' to view HTML report"
 
-coverage-html: coverage ## Generate and open HTML coverage report
+coverage-app: ## Same filtering as coverage / test-ci (drop *_moq.go lines from profile)
+	@echo "Generating coverage (product code, no moq stubs)..."
+	@go test -coverprofile=coverage.full.out ./...
+	@awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out
+	@cp coverage.app.out coverage.out
+	@echo ""
+	@go tool cover -func=coverage.out | tail -1
+	@echo "coverage.out and coverage.app.out = filtered; coverage.full.out = raw"
+
+coverage-html: coverage ## Generate and open HTML coverage report (uses filtered coverage.out)
 	@echo "Opening HTML coverage report..."
 	@go tool cover -html=coverage.out
 
 fmt: ## Format Go code
 	@echo "Formatting Go code..."
 	@go fmt ./...
+
+mocks: ## Regenerate moq mocks (uses `tool github.com/matryer/moq` from go.mod)
+	@echo "Running go generate for moq stubs..."
+	@go generate ./...
 
 lint: ## Run linter (requires golangci-lint)
 	@echo "Running linter..."

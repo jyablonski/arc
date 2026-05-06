@@ -91,3 +91,4 @@ config.local.*
 *.deb
 *.rpm
 .codex
+*.xml

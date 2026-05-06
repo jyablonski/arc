@@ -6,6 +6,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestReportFromDashboard_onDemandSpendWindow(t *testing.T) {
+	limit := 10000.0
+	rem := 7500.0
+	u := dashboardUsageEnvelope{
+		Enabled:         ptrBool(true),
+		BillingCycleEnd: "1732500000000",
+		PlanUsage: &planUsage{
+			Limit:            floatPtr(5000),
+			TotalPercentUsed: floatPtr(10),
+		},
+		SpendLimitUsage: &spendLimitUsage{
+			IndividualLimit:     &limit,
+			IndividualRemaining: &rem,
+		},
+	}
+	rep, err := reportFromDashboard(&u, "pro", "Pro")
+	require.NoError(t, err)
+	var onDemand bool
+	for _, w := range rep.Windows {
+		if w.Label == "On-demand budget" {
+			onDemand = true
+			require.InDelta(t, 25, w.PercentUsed, 1e-9)
+			require.Contains(t, w.Detail, "$25.00")
+		}
+	}
+	require.True(t, onDemand)
+}
+
 func TestReportFromDashboard_individualPercents(t *testing.T) {
 	u := dashboardUsageEnvelope{
 		Enabled:           ptrBool(true),

@@ -50,3 +50,10 @@ func TestCombineErrors(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "e1")
 }
+
+func TestHintFor(t *testing.T) {
+	require.Contains(t, hintFor("claude", nil), "credentials")
+	require.Contains(t, hintFor("codex", nil), "Codex")
+	require.Contains(t, hintFor("cursor", nil), "state.vscdb")
+	require.Equal(t, "", hintFor("other", nil))
+}
