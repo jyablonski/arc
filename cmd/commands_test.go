@@ -31,6 +31,7 @@ var expectedCommands = []string{
 	"ai",
 	"ai usage",
 	"aws",
+	"help [command]",
 	"clean",
 	"docker clean",
 	"git cleanup",

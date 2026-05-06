@@ -29,6 +29,8 @@ type Provider struct {
 	HTTPClient *http.Client
 	HomeDir    string
 	BaseURL    string
+	// OAuthTokenURL overrides POST https://console.anthropic.com/v1/oauth/token (tests).
+	OAuthTokenURL string
 }
 
 func (p *Provider) Name() string { return "claude" }
@@ -42,46 +44,131 @@ func (p *Provider) Usage(ctx context.Context) (ai.UsageReport, error) {
 			return ai.UsageReport{}, fmt.Errorf("user home: %w", err)
 		}
 	}
-	token, err := readAccessToken(home)
+	loaded, err := readOAuthWithMeta(home)
 	if err != nil {
 		return ai.UsageReport{}, err
 	}
+	if err := validateOAuthTokenKinds(loaded.AccessToken); err != nil {
+		return ai.UsageReport{}, err
+	}
+
 	client := p.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
 	}
+
+	access := strings.TrimSpace(loaded.AccessToken)
+	hasRefresh := strings.TrimSpace(loaded.RefreshToken) != ""
+
+	if exp, ok := parseExpires(loaded.ExpiresAt); ok && time.Now().After(exp) && hasRefresh {
+		access, err = p.refreshOAuthCredentials(ctx, home, client)
+		if err != nil {
+			return ai.UsageReport{}, fmt.Errorf("OAuth token expired and refresh failed: %w", err)
+		}
+	}
+
+	rep, status, body, err := p.fetchOAuthUsage(ctx, client, access)
+	if err != nil {
+		return ai.UsageReport{}, err
+	}
+	if status == http.StatusOK {
+		return rep, nil
+	}
+
+	if status == http.StatusUnauthorized {
+		rel, errR := readOAuthWithMeta(home)
+		if errR == nil && strings.TrimSpace(rel.RefreshToken) != "" {
+			access, err = p.refreshOAuthCredentials(ctx, home, client)
+			if err != nil {
+				return ai.UsageReport{}, fmt.Errorf("usage API unauthorized and OAuth refresh failed: %w", err)
+			}
+			rep, status, body, err = p.fetchOAuthUsage(ctx, client, access)
+			if err != nil {
+				return ai.UsageReport{}, err
+			}
+			if status == http.StatusOK {
+				return rep, nil
+			}
+		}
+	}
+
+	if status == http.StatusUnauthorized {
+		msg := anthropicUserMessage(body)
+		if msg != "" {
+			return ai.UsageReport{}, fmt.Errorf("usage API 401: %s — subscriber OAuth token not accepted by /api/oauth/usage (often expired); open Claude Code with your Claude subscription so it refreshes ~/.claude/.credentials.json, or confirm auth is OAuth (sk-ant-oat…) not API key-only (sk-ant-api…)", msg)
+		}
+	}
+	url := oauthUsageURL
+	if strings.TrimSpace(p.BaseURL) != "" {
+		url = strings.TrimSuffix(p.BaseURL, "/") + "/api/oauth/usage"
+	}
+	return ai.UsageReport{}, fmt.Errorf("usage API %s: %s — body: %s", http.StatusText(status), url, truncate(string(body), 400))
+}
+
+func (p *Provider) refreshOAuthCredentials(ctx context.Context, home string, client *http.Client) (string, error) {
+	oauthPersistMu.Lock()
+	defer oauthPersistMu.Unlock()
+
+	loaded, err := readOAuthWithMeta(home)
+	if err != nil {
+		return "", err
+	}
+	rt := strings.TrimSpace(loaded.RefreshToken)
+	if rt == "" {
+		return "", fmt.Errorf("no OAuth refresh token available")
+	}
+	if loaded.PersistPath == "" {
+		return "", fmt.Errorf("cannot save refreshed OAuth credentials (create ~/.claude/.credentials.json via Claude Code sign-in first)")
+	}
+	tokenURL := strings.TrimSpace(p.OAuthTokenURL)
+	res, err := RefreshOAuthTokens(ctx, RefreshOAuthParams{
+		RefreshToken: rt,
+		HTTPClient:   client,
+		TokenURL:     tokenURL,
+	})
+	if err != nil {
+		return "", err
+	}
+	if err := mergeRefreshIntoCredentialsFile(loaded.PersistPath, res); err != nil {
+		return "", fmt.Errorf("save refreshed OAuth credentials: %w", err)
+	}
+	fresh, err := readOAuthWithMeta(home)
+	if err != nil {
+		return "", err
+	}
+	if err := validateOAuthTokenKinds(fresh.AccessToken); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(fresh.AccessToken), nil
+}
+
+func (p *Provider) fetchOAuthUsage(ctx context.Context, client *http.Client, bearer string) (ai.UsageReport, int, []byte, error) {
 	url := oauthUsageURL
 	if strings.TrimSpace(p.BaseURL) != "" {
 		url = strings.TrimSuffix(p.BaseURL, "/") + "/api/oauth/usage"
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return ai.UsageReport{}, err
+		return ai.UsageReport{}, 0, nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("anthropic-beta", oauthBetaHeader)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return ai.UsageReport{}, fmt.Errorf("GET %s: %w", url, err)
+		return ai.UsageReport{}, 0, nil, fmt.Errorf("GET %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusUnauthorized {
-			msg := anthropicUserMessage(body)
-			if msg != "" {
-				return ai.UsageReport{}, fmt.Errorf("usage API 401: %s — subscriber OAuth token not accepted by /api/oauth/usage (often expired); open Claude Code with your Claude subscription so it refreshes ~/.claude/.credentials.json, or confirm auth is OAuth (sk-ant-oat…) not API key-only (sk-ant-api…)", msg)
-			}
-		}
-		return ai.UsageReport{}, fmt.Errorf("usage API %s: %s — body: %s", resp.Status, url, truncate(string(body), 400))
+		return ai.UsageReport{}, resp.StatusCode, body, nil
 	}
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return ai.UsageReport{}, fmt.Errorf("decode usage JSON: %w", err)
+		return ai.UsageReport{}, resp.StatusCode, body, fmt.Errorf("decode usage JSON: %w", err)
 	}
 
 	var windows []ai.UsageWindow
@@ -124,7 +211,7 @@ func (p *Provider) Usage(ctx context.Context) (ai.UsageReport, error) {
 		}
 	}
 
-	return ai.UsageReport{Windows: windows, Extra: extra}, nil
+	return ai.UsageReport{Windows: windows, Extra: extra}, resp.StatusCode, body, nil
 }
 
 func humanizeBucketKey(k string) string {

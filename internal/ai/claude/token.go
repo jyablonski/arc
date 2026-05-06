@@ -14,25 +14,21 @@ import (
 )
 
 type oauthCreds struct {
-	AccessToken string `json:"accessToken"`
-	ExpiresAt   any    `json:"expiresAt"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	ExpiresAt    any    `json:"expiresAt"`
 }
 
 type credentialsFile struct {
 	ClaudeAIOAuth *oauthCreds `json:"claudeAiOauth"`
 }
 
-func readAccessToken(homeDir string) (string, error) {
-	tok, err := readOAuthWithMeta(homeDir)
-	if err != nil {
-		return "", err
-	}
-	return tok.AccessToken, nil
-}
-
 type oauthLoaded struct {
-	AccessToken string
-	CredsPath   string
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    any
+	CredsPath    string // label for errors (file path or Keychain)
+	PersistPath  string // writable ~/.claude/.credentials.json when refresh may update disk
 }
 
 func readOAuthWithMeta(homeDir string) (*oauthLoaded, error) {
@@ -42,10 +38,16 @@ func readOAuthWithMeta(homeDir string) (*oauthLoaded, error) {
 			if err := validateOAuthTokenKinds(tok.AccessToken); err != nil {
 				return nil, err
 			}
-			if exp, ok := parseExpires(tok.ExpiresAt); ok && time.Now().After(exp) {
+			if exp, ok := parseExpires(tok.ExpiresAt); ok && time.Now().After(exp) && strings.TrimSpace(tok.RefreshToken) == "" {
 				return nil, fmt.Errorf("OAuth access token in %s expired at %s — open Claude Code and sign in again (or wait for refresh) then retry", path, exp.UTC().Format(time.RFC3339))
 			}
-			return &oauthLoaded{AccessToken: strings.TrimSpace(tok.AccessToken), CredsPath: path}, nil
+			return &oauthLoaded{
+				AccessToken:  strings.TrimSpace(tok.AccessToken),
+				RefreshToken: strings.TrimSpace(tok.RefreshToken),
+				ExpiresAt:    tok.ExpiresAt,
+				CredsPath:    path,
+				PersistPath:  path,
+			}, nil
 		}
 	}
 
@@ -57,10 +59,20 @@ func readOAuthWithMeta(homeDir string) (*oauthLoaded, error) {
 				if err := validateOAuthTokenKinds(tok.AccessToken); err != nil {
 					return nil, err
 				}
-				if exp, ok := parseExpires(tok.ExpiresAt); ok && time.Now().After(exp) {
+				if exp, ok := parseExpires(tok.ExpiresAt); ok && time.Now().After(exp) && strings.TrimSpace(tok.RefreshToken) == "" {
 					return nil, fmt.Errorf("OAuth token in macOS Keychain (Claude Code-credentials) expired at %s — open Claude Code to refresh", exp.UTC().Format(time.RFC3339))
 				}
-				return &oauthLoaded{AccessToken: strings.TrimSpace(tok.AccessToken), CredsPath: "macOS Keychain (Claude Code-credentials)"}, nil
+				pp := ""
+				if strings.TrimSpace(tok.RefreshToken) != "" {
+					pp = path
+				}
+				return &oauthLoaded{
+					AccessToken:  strings.TrimSpace(tok.AccessToken),
+					RefreshToken: strings.TrimSpace(tok.RefreshToken),
+					ExpiresAt:    tok.ExpiresAt,
+					CredsPath:    "macOS Keychain (Claude Code-credentials)",
+					PersistPath:  pp,
+				}, nil
 			}
 			if strings.HasPrefix(out, "sk-ant-oat") {
 				return &oauthLoaded{AccessToken: out, CredsPath: "macOS Keychain (Claude Code-credentials)"}, nil
@@ -94,7 +106,8 @@ func oauthFromBytes(b []byte) (*credentialsFile, *oauthCreds, bool) {
 	if strings.TrimSpace(s) == "" {
 		return nil, nil, false
 	}
-	tok := &oauthCreds{AccessToken: s, ExpiresAt: v["expiresAt"]}
+	rt, _ := v["refreshToken"].(string)
+	tok := &oauthCreds{AccessToken: s, RefreshToken: rt, ExpiresAt: v["expiresAt"]}
 	return nil, tok, true
 }
 

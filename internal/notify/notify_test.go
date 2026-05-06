@@ -256,6 +256,11 @@ func TestDiscordSend(t *testing.T) {
 	})
 }
 
+func TestWebhookError_Error(t *testing.T) {
+	e := &WebhookError{StatusCode: 418}
+	require.Equal(t, "webhook returned status 418", e.Error())
+}
+
 func TestSeverityEmoji(t *testing.T) {
 	t.Run("When severity is p1, it returns red circle", func(t *testing.T) {
 		assert.Equal(t, "🔴", severityEmoji("p1"))

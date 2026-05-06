@@ -65,7 +65,7 @@ func normalizeFilter(names []string) map[string]bool {
 func hintFor(provider string, err error) string {
 	switch strings.ToLower(provider) {
 	case "claude":
-		return "check ~/.claude/.credentials.json, macOS Keychain item \"Claude Code-credentials\", token expiry, and header anthropic-beta oauth-2025-04-20 if the API shape changed"
+		return "check ~/.claude/.credentials.json (accessToken + refreshToken), macOS Keychain if applicable; OAuth refresh hits console.anthropic.com/v1/oauth/token — rate limits possible; header anthropic-beta oauth-2025-04-20 if usage API shape changed"
 	case "codex":
 		return "install Codex CLI (npm i -g @openai/codex), run codex login, and ensure codex is on PATH; see OpenAI Codex App Server docs for account/rateLimits/read"
 	case "cursor":

@@ -17,6 +17,15 @@ const (
 	defaultAPI   = "https://api.github.com"
 )
 
+// resolveExecutablePath is overridden in tests so Upgrade does not replace the running test binary.
+var resolveExecutablePath = func() (string, error) {
+	p, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(p)
+}
+
 type Release struct {
 	TagName string  `json:"tag_name"`
 	Assets  []Asset `json:"assets"`
@@ -94,14 +103,9 @@ func (u *Updater) Upgrade(w io.Writer, currentVersion string) error {
 		return fmt.Errorf("no release asset found for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
-	execPath, err := os.Executable()
+	execPath, err := resolveExecutablePath()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
-	}
-
-	execPath, err = filepath.EvalSymlinks(execPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve executable path: %w", err)
 	}
 
 	if err := DownloadAndReplace(execPath, downloadURL); err != nil {

@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+//go:generate go tool moq -rm -out notifier_moq.go . Notifier
+
 // WebhookError is returned when a webhook endpoint returns a non-success HTTP status.
 type WebhookError struct {
 	StatusCode int
