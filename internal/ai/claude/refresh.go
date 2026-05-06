@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	oauthTokenURLDefault  = "https://console.anthropic.com/v1/oauth/token"
+	oauthTokenURLDefault = "https://console.anthropic.com/v1/oauth/token"
+	// oauthClientIDDefault is Anthropic's public OAuth client id for the console token
+	// endpoint (not a secret; same class of value as in other Claude desktop/CLI clients).
 	oauthClientIDDefault  = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 	jsonContentTypeOAuth  = "application/json"
 	userAgentOAuthRefresh = "arc-claude-oauth-refresh"
