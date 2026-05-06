@@ -1,4 +1,4 @@
-.PHONY: build install clean test test-ci coverage coverage-app coverage-html fmt lint help release
+.PHONY: build install clean test test-ci coverage coverage-full coverage-app coverage-html fmt lint help release mocks tidy deps
 
 # Binary name
 BINARY_NAME=arc
@@ -50,21 +50,24 @@ test: ## Run tests with gotestsum (install: go install gotest.tools/gotestsum@la
 	@echo "Running tests..."
 	gotestsum --format testdox -- -race ./...
 
+coverage-full:
+	@echo "Generating coverage profile..."
+	@go test -coverprofile=coverage.full.out ./...
+
+# coverage.full.out must exist; strips *_moq.go lines into coverage.app.out and coverage.out
+FILTER_MOQ_FROM_FULL = awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out && cp coverage.app.out coverage.out
+
 test-ci: ## Run tests with coverage and JUnit output (for CI)
 	@echo "Running tests with coverage..."
 	gotestsum --format testdox --junitfile test-results.xml -- -race -coverprofile=coverage.full.out ./...
-	@awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out
-	@cp coverage.app.out coverage.out
+	@$(FILTER_MOQ_FROM_FULL)
 	@echo ""
 	@echo "Statement coverage (product code, *_moq.go excluded):"
 	@go tool cover -func=coverage.out | tail -1
 	@echo "coverage.out = filtered (same as coverage.app.out); coverage.full.out = unfiltered"
 
-coverage: ## Generate and display test coverage report (filtered; raw in coverage.full.out)
-	@echo "Generating coverage profile..."
-	@go test -coverprofile=coverage.full.out ./...
-	@awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out
-	@cp coverage.app.out coverage.out
+coverage: coverage-full ## Generate and display test coverage report (filtered; raw in coverage.full.out)
+	@$(FILTER_MOQ_FROM_FULL)
 	@echo ""
 	@echo "Coverage by function (product code, moq stubs excluded):"
 	@go tool cover -func=coverage.out
@@ -72,11 +75,8 @@ coverage: ## Generate and display test coverage report (filtered; raw in coverag
 	@echo "Coverage profile saved to coverage.out (filtered). Full: coverage.full.out"
 	@echo "Run 'make coverage-html' to view HTML report"
 
-coverage-app: ## Same filtering as coverage / test-ci (drop *_moq.go lines from profile)
-	@echo "Generating coverage (product code, no moq stubs)..."
-	@go test -coverprofile=coverage.full.out ./...
-	@awk '/^mode:/ { print; next } /_moq\.go:/ { next } { print }' coverage.full.out > coverage.app.out
-	@cp coverage.app.out coverage.out
+coverage-app: coverage-full ## Short coverage summary (same filtering as coverage / test-ci)
+	@$(FILTER_MOQ_FROM_FULL)
 	@echo ""
 	@go tool cover -func=coverage.out | tail -1
 	@echo "coverage.out and coverage.app.out = filtered; coverage.full.out = raw"
