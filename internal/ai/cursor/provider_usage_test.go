@@ -13,6 +13,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +21,7 @@ func cursorHomeWithAccessToken(t *testing.T, rawToken string) string {
 	t.Helper()
 	home := t.TempDir()
 	dbPath := StateDBPath(home)
-	require.NoError(t, os.MkdirAll(filepath.Dir(dbPath), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(dbPath), filemode.Dir))
 	dsn := "file:" + filepath.ToSlash(dbPath)
 	db, err := sql.Open("sqlite", dsn)
 	require.NoError(t, err)

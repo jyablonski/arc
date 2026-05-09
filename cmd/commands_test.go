@@ -52,6 +52,7 @@ var expectedCommands = []string{
 	"skills",
 	"skills add [path]",
 	"skills sync",
+	"skills export <parent_folder>",
 	"skills list",
 	"skills validate [name]",
 	"skills remove <name>",

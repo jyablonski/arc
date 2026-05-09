@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jyablonski/arc/internal/filemode"
 )
 
 func newTestManager(t *testing.T, dryRun bool) (*Manager, Paths, []Provider) {
@@ -20,12 +22,12 @@ func newTestManager(t *testing.T, dryRun bool) (*Manager, Paths, []Provider) {
 		CursorDir:   filepath.Join(root, "cursor", "skills-cursor"),
 		OpencodeDir: filepath.Join(root, "opencode"),
 	}
-	if err := os.MkdirAll(p.SkillsRoot, 0o755); err != nil {
+	if err := os.MkdirAll(p.SkillsRoot, filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	providers := Providers(p)
 	for _, pr := range providers {
-		if err := os.MkdirAll(pr.SkillsDir, 0o755); err != nil {
+		if err := os.MkdirAll(pr.SkillsDir, filemode.Dir); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -35,11 +37,11 @@ func newTestManager(t *testing.T, dryRun bool) (*Manager, Paths, []Provider) {
 
 func writeSkill(t *testing.T, dir, name, description string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	body := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nbody\n", name, description)
-	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -96,10 +98,10 @@ func TestAdd_FromDirectoryPreservesSidecars(t *testing.T) {
 	m, paths, _ := newTestManager(t, false)
 	draft := filepath.Join(t.TempDir(), "my-draft")
 	writeSkill(t, draft, "canvas", "canvas skill")
-	if err := os.MkdirAll(filepath.Join(draft, "sdk"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(draft, "sdk"), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(draft, "sdk", "helper.py"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(draft, "sdk", "helper.py"), []byte("x"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.Add(draft, false); err != nil {
@@ -150,7 +152,7 @@ func TestAdd_ValidationFailures(t *testing.T) {
 			setup: func(t *testing.T) string {
 				d := t.TempDir()
 				p := filepath.Join(d, "skill.md")
-				_ = os.WriteFile(p, []byte("---\nname: x\ndescription: y\n---\n"), 0o644)
+				_ = os.WriteFile(p, []byte("---\nname: x\ndescription: y\n---\n"), filemode.File)
 				return p
 			},
 			wantErr: "must be named SKILL.md",
@@ -159,7 +161,7 @@ func TestAdd_ValidationFailures(t *testing.T) {
 			name: "dir missing SKILL.md",
 			setup: func(t *testing.T) string {
 				d := filepath.Join(t.TempDir(), "draft")
-				_ = os.MkdirAll(d, 0o755)
+				_ = os.MkdirAll(d, filemode.Dir)
 				return d
 			},
 			wantErr: "contains no SKILL.md",
@@ -257,7 +259,7 @@ func TestLinkOne_SkipsRealDirInSlot(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
 	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "ok")
 	realDir := filepath.Join(providers[2].SkillsDir, "foo")
-	if err := os.MkdirAll(realDir, 0o755); err != nil {
+	if err := os.MkdirAll(realDir, filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.linkAllProviders("foo"); err != nil {
@@ -277,7 +279,7 @@ func TestLinkOne_SkipsRealDirInSlot(t *testing.T) {
 	}
 }
 
-func TestSync_MigratesProviderLocalSkill(t *testing.T) {
+func TestSync_DoesNotMigrateProviderLocalSkill(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
 	writeSkill(t, filepath.Join(providers[0].SkillsDir, "foo"), "foo", "from-claude")
 
@@ -285,28 +287,50 @@ func TestSync_MigratesProviderLocalSkill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
-	if res.Migrated != 1 {
-		t.Errorf("Migrated: got %d, want 1", res.Migrated)
+	if res.Linked != 0 {
+		t.Errorf("Linked: got %d, want 0", res.Linked)
+	}
+	if _, err := os.Stat(filepath.Join(paths.SkillsRoot, "foo")); !os.IsNotExist(err) {
+		t.Errorf("sync created canonical skill: %v", err)
+	}
+	info, err := os.Lstat(filepath.Join(providers[0].SkillsDir, "foo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("provider-local skill should remain a real directory")
+	}
+}
+
+func TestExport_CopiesCanonicalSkillsToParentFolder(t *testing.T) {
+	m, paths, providers := newTestManager(t, false)
+	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "canonical")
+	dest := filepath.Join(providers[0].SkillsDir, "exported")
+
+	res, err := m.Export(dest)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if res.Exported != 1 {
+		t.Errorf("Exported: got %d, want 1", res.Exported)
 	}
 	if res.Conflicts != 0 {
 		t.Errorf("Conflicts: got %d, want 0", res.Conflicts)
 	}
-	if _, err := os.Stat(filepath.Join(paths.SkillsRoot, "foo", "SKILL.md")); err != nil {
-		t.Errorf("canonical not migrated: %v", err)
-	}
-	if !isSymlink(t, filepath.Join(providers[0].SkillsDir, "foo")) {
-		t.Errorf("claude slot should be symlink after migration")
+	if _, err := os.Stat(filepath.Join(dest, "foo", "SKILL.md")); err != nil {
+		t.Errorf("exported skill missing: %v", err)
 	}
 }
 
-func TestSync_DedupesByteIdentical(t *testing.T) {
+func TestExport_DedupesByteIdentical(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
 	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "same")
-	writeSkill(t, filepath.Join(providers[0].SkillsDir, "foo"), "foo", "same")
+	dest := filepath.Join(providers[0].SkillsDir, "exported")
+	writeSkill(t, filepath.Join(dest, "foo"), "foo", "same")
 
-	res, err := m.Sync()
+	res, err := m.Export(dest)
 	if err != nil {
-		t.Fatalf("Sync: %v", err)
+		t.Fatalf("Export: %v", err)
 	}
 	if res.Deduped != 1 {
 		t.Errorf("Deduped: got %d, want 1", res.Deduped)
@@ -314,76 +338,57 @@ func TestSync_DedupesByteIdentical(t *testing.T) {
 	if res.Conflicts != 0 {
 		t.Errorf("Conflicts: got %d, want 0", res.Conflicts)
 	}
-	if !isSymlink(t, filepath.Join(providers[0].SkillsDir, "foo")) {
-		t.Errorf("claude dedupe should have left a symlink")
-	}
 }
 
-func TestSync_RefusesDivergent(t *testing.T) {
+func TestExport_RefusesDivergent(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
 	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "canonical-version")
-	writeSkill(t, filepath.Join(providers[0].SkillsDir, "foo"), "foo", "different-version")
+	dest := filepath.Join(providers[0].SkillsDir, "exported")
+	writeSkill(t, filepath.Join(dest, "foo"), "foo", "different-version")
 
-	prev := nowUnix
-	t.Cleanup(func() { nowUnix = prev })
-	nowUnix = func() int64 { return 42 }
-
-	res, err := m.Sync()
+	res, err := m.Export(dest)
 	if err != nil {
-		t.Fatalf("Sync: %v", err)
+		t.Fatalf("Export: %v", err)
 	}
 	if res.Conflicts == 0 {
 		t.Errorf("expected conflict count > 0")
 	}
-	backup := filepath.Join(providers[0].SkillsDir, "foo.conflict.42")
-	if _, err := os.Stat(backup); err != nil {
-		t.Errorf("conflict backup missing: %v", err)
+	data, err := os.ReadFile(filepath.Join(dest, "foo", SkillFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "different-version") {
+		t.Errorf("divergent destination should remain unchanged: %s", data)
 	}
 }
 
-func TestSync_RefusesMultiProviderDivergence(t *testing.T) {
+func TestExport_EmptyCanonicalNoops(t *testing.T) {
 	m, _, providers := newTestManager(t, false)
-	writeSkill(t, filepath.Join(providers[0].SkillsDir, "foo"), "foo", "claude-version")
-	writeSkill(t, filepath.Join(providers[1].SkillsDir, "foo"), "foo", "codex-version")
 
-	res, err := m.Sync()
+	res, err := m.Export(providers[0].SkillsDir)
 	if err != nil {
-		t.Fatalf("Sync: %v", err)
+		t.Fatalf("Export: %v", err)
 	}
-	if res.Conflicts == 0 {
-		t.Errorf("expected conflicts > 0 for multi-provider divergence")
-	}
-	if res.Migrated != 0 {
-		t.Errorf("expected zero migrations, got %d", res.Migrated)
-	}
-	if isSymlink(t, filepath.Join(providers[0].SkillsDir, "foo")) {
-		t.Errorf("claude should not be symlinked")
-	}
-	if isSymlink(t, filepath.Join(providers[1].SkillsDir, "foo")) {
-		t.Errorf("codex should not be symlinked")
+	if res.Exported != 0 || res.Deduped != 0 || res.Conflicts != 0 {
+		t.Errorf("unexpected export result: %+v", res)
 	}
 }
 
-func TestSync_MultiProviderIdenticalMigrates(t *testing.T) {
+func TestExport_DryRunMakesNoChanges(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
-	writeSkill(t, filepath.Join(providers[0].SkillsDir, "foo"), "foo", "same")
-	writeSkill(t, filepath.Join(providers[1].SkillsDir, "foo"), "foo", "same")
+	m.dryRun = true
+	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "x")
+	dest := filepath.Join(providers[0].SkillsDir, "exported")
 
-	res, err := m.Sync()
+	res, err := m.Export(dest)
 	if err != nil {
-		t.Fatalf("Sync: %v", err)
+		t.Fatalf("Export dry-run: %v", err)
 	}
-	if res.Conflicts != 0 {
-		t.Errorf("expected no conflicts, got %d", res.Conflicts)
+	if res.Exported != 1 {
+		t.Errorf("Exported: got %d, want 1", res.Exported)
 	}
-	if _, err := os.Stat(filepath.Join(paths.SkillsRoot, "foo", "SKILL.md")); err != nil {
-		t.Errorf("canonical not created: %v", err)
-	}
-	if !isSymlink(t, filepath.Join(providers[0].SkillsDir, "foo")) {
-		t.Errorf("claude not symlinked")
-	}
-	if !isSymlink(t, filepath.Join(providers[1].SkillsDir, "foo")) {
-		t.Errorf("codex not symlinked")
+	if _, err := os.Stat(filepath.Join(dest, "foo")); !os.IsNotExist(err) {
+		t.Errorf("dry-run exported skill")
 	}
 }
 
@@ -456,7 +461,7 @@ func TestList_StatusPerProvider(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
 	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "x")
 	mustSymlink(t, filepath.Join(paths.SkillsRoot, "foo"), filepath.Join(providers[0].SkillsDir, "foo"))
-	if err := os.MkdirAll(filepath.Join(providers[2].SkillsDir, "foo"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(providers[2].SkillsDir, "foo"), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	external := filepath.Join(t.TempDir(), "external")
@@ -506,7 +511,7 @@ func TestList_JSONShape(t *testing.T) {
 func TestList_ConflictBackupsReported(t *testing.T) {
 	m, _, providers := newTestManager(t, false)
 	backup := filepath.Join(providers[0].SkillsDir, "foo.conflict.123")
-	if err := os.MkdirAll(backup, 0o755); err != nil {
+	if err := os.MkdirAll(backup, filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	res, err := m.List()
@@ -611,10 +616,10 @@ func TestRemove_RefusesToTouchRealFileInProviderSlot(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
 	writeSkill(t, filepath.Join(paths.SkillsRoot, "foo"), "foo", "x")
 	realDir := filepath.Join(providers[0].SkillsDir, "foo")
-	if err := os.MkdirAll(realDir, 0o755); err != nil {
+	if err := os.MkdirAll(realDir, filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(realDir, "keep.txt"), []byte("important"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(realDir, "keep.txt"), []byte("important"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.Remove("foo"); err != nil {
@@ -630,7 +635,7 @@ func TestPrune_RemovesOnlyDangling(t *testing.T) {
 	writeSkill(t, filepath.Join(paths.SkillsRoot, "good"), "good", "x")
 	mustSymlink(t, filepath.Join(paths.SkillsRoot, "good"), filepath.Join(providers[0].SkillsDir, "good"))
 	mustSymlink(t, filepath.Join(paths.SkillsRoot, "dead"), filepath.Join(providers[0].SkillsDir, "dead"))
-	if err := os.MkdirAll(filepath.Join(providers[0].SkillsDir, "real"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(providers[0].SkillsDir, "real"), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 

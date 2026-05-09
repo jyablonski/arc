@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -131,7 +132,7 @@ func TestDownloadAndReplace(t *testing.T) {
 	t.Run("When download returns non-200, it errors", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		path := filepath.Join(tmpDir, "arc")
-		require.NoError(t, os.WriteFile(path, []byte("old"), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte("old"), filemode.Executable))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
@@ -205,7 +206,7 @@ func TestUpgrade_apiError(t *testing.T) {
 func TestUpgrade_downloadsNewVersion(t *testing.T) {
 	tmp := t.TempDir()
 	binPath := filepath.Join(tmp, "arc")
-	require.NoError(t, os.WriteFile(binPath, []byte("old"), 0o755))
+	require.NoError(t, os.WriteFile(binPath, []byte("old"), filemode.Executable))
 
 	dl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")

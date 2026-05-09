@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,7 +74,7 @@ while read -r line; do
   esac
 done
 `
-	require.NoError(t, os.WriteFile(script, []byte(scriptBody), 0o755))
+	require.NoError(t, os.WriteFile(script, []byte(scriptBody), filemode.Executable))
 
 	p := &Provider{CodexBinary: script}
 	rep, err := p.Usage(context.Background())

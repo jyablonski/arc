@@ -4,14 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jyablonski/arc/internal/filemode"
 )
 
 func TestSyncRules_CreatesMissing(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
-	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.RulesFile, []byte("shared rules\n"), 0o644); err != nil {
+	if err := os.WriteFile(paths.RulesFile, []byte("shared rules\n"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,16 +37,16 @@ func TestSyncRules_CreatesMissing(t *testing.T) {
 
 func TestSyncRules_RefusesRealFile(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
-	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.RulesFile, []byte("shared\n"), 0o644); err != nil {
+	if err := os.WriteFile(paths.RulesFile, []byte("shared\n"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(providers[0].RulesFile[:len(providers[0].RulesFile)-len("/CLAUDE.md")], 0o755); err != nil {
+	if err := os.MkdirAll(providers[0].RulesFile[:len(providers[0].RulesFile)-len("/CLAUDE.md")], filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(providers[0].RulesFile, []byte("my rules\n"), 0o644); err != nil {
+	if err := os.WriteFile(providers[0].RulesFile, []byte("my rules\n"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,17 +73,17 @@ func TestSyncRules_CanonicalMissing(t *testing.T) {
 
 func TestSyncRules_FixesStaleSymlink(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
-	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.RulesFile, []byte("new\n"), 0o644); err != nil {
+	if err := os.WriteFile(paths.RulesFile, []byte("new\n"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(providers[0].RulesFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(providers[0].RulesFile), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	oldTarget := filepath.Join(t.TempDir(), "old.md")
-	_ = os.WriteFile(oldTarget, []byte("old\n"), 0o644)
+	_ = os.WriteFile(oldTarget, []byte("old\n"), filemode.File)
 	mustSymlink(t, oldTarget, providers[0].RulesFile)
 
 	if _, err := m.SyncRules(); err != nil {
@@ -95,13 +97,13 @@ func TestSyncRules_FixesStaleSymlink(t *testing.T) {
 
 func TestStatusRules(t *testing.T) {
 	m, paths, providers := newTestManager(t, false)
-	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(paths.RulesFile), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.RulesFile, []byte("x\n"), 0o644); err != nil {
+	if err := os.WriteFile(paths.RulesFile, []byte("x\n"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(providers[0].RulesFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(providers[0].RulesFile), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	mustSymlink(t, paths.RulesFile, providers[0].RulesFile)

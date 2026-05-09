@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jyablonski/arc/internal/filemode"
 )
 
 func setupSkillsEnv(t *testing.T) string {
@@ -16,7 +18,7 @@ func setupSkillsEnv(t *testing.T) string {
 	t.Setenv("ARC_CODEX_DIR", filepath.Join(root, "codex"))
 	t.Setenv("ARC_CURSOR_SKILLS_DIR", filepath.Join(root, "cursor", "skills-cursor"))
 	t.Setenv("ARC_OPENCODE_DIR", filepath.Join(root, "opencode"))
-	if err := os.MkdirAll(filepath.Join(root, "ai"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "ai"), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -31,10 +33,10 @@ func resetSkillsFlags() {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -110,6 +112,44 @@ func TestSkillsSyncCmdSuccess(t *testing.T) {
 	}
 }
 
+func TestSkillsExportCmdRequiresArg(t *testing.T) {
+	setupSkillsEnv(t)
+	defer resetSkillsFlags()
+	if err := skillsExportCmd.RunE(skillsExportCmd, []string{}); err == nil {
+		t.Fatal("expected error for missing parent_folder")
+	}
+}
+
+func TestSkillsExportCmdSuccess(t *testing.T) {
+	root := setupSkillsEnv(t)
+	defer resetSkillsFlags()
+	writeFile(t, filepath.Join(root, "ai", "skills", "foo", "SKILL.md"),
+		"---\nname: foo\ndescription: ok\n---\n")
+	dest := filepath.Join(root, "tester")
+
+	if err := skillsExportCmd.RunE(skillsExportCmd, []string{dest}); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "foo", "SKILL.md")); err != nil {
+		t.Errorf("exported skill missing: %v", err)
+	}
+}
+
+func TestSkillsExportCmdReturnsErrOnConflict(t *testing.T) {
+	root := setupSkillsEnv(t)
+	defer resetSkillsFlags()
+	writeFile(t, filepath.Join(root, "ai", "skills", "foo", "SKILL.md"),
+		"---\nname: foo\ndescription: canonical\n---\n")
+	dest := filepath.Join(root, "tester")
+	writeFile(t, filepath.Join(dest, "foo", "SKILL.md"),
+		"---\nname: foo\ndescription: divergent\n---\n")
+
+	err := skillsExportCmd.RunE(skillsExportCmd, []string{dest})
+	if !errors.Is(err, ErrSkillsConflict) {
+		t.Errorf("expected ErrSkillsConflict, got %v", err)
+	}
+}
+
 func TestSkillsValidateCmd(t *testing.T) {
 	root := setupSkillsEnv(t)
 	defer resetSkillsFlags()
@@ -157,7 +197,7 @@ func TestSkillsPruneCmd(t *testing.T) {
 	root := setupSkillsEnv(t)
 	defer resetSkillsFlags()
 	claude := filepath.Join(root, "claude", "skills")
-	if err := os.MkdirAll(claude, 0o755); err != nil {
+	if err := os.MkdirAll(claude, filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(t.TempDir(), "does-not-exist"), filepath.Join(claude, "gone")); err != nil {

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/jyablonski/arc/internal/output"
 )
 
@@ -37,7 +38,7 @@ func (m *Manager) SyncRules() (int, error) {
 		}
 		target := p.RulesFile
 		parent := filepath.Dir(target)
-		if err := m.mkdirAll(parent, 0o755); err != nil {
+		if err := m.mkdirAll(parent, filemode.Dir); err != nil {
 			output.Warning(fmt.Sprintf("%s: mkdir %s: %v", p.Name, parent, err))
 			continue
 		}
