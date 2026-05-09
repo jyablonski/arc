@@ -59,12 +59,9 @@ draft.`,
 
 var skillsSyncCmd = &cobra.Command{
 	Use:   "sync",
-	Short: "Migrate provider-local skills to canonical and forward-link everywhere",
-	Long: `Phase 1: move real skill directories under provider dirs into canonical,
-deduping byte-identical copies and refusing to clobber divergent ones.
-
-Phase 2: symlink every canonical skill into every provider and prune dangling
-symlinks. Real files in provider slots are never touched.
+	Short: "Forward-link canonical skills into every provider",
+	Long: `Symlink every canonical skill under ~/ai/skills into every provider and
+prune dangling symlinks. Real files in provider slots are never touched.
 
 Exits with a non-zero status if any conflict is unresolved.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -74,8 +71,34 @@ Exits with a non-zero status if any conflict is unresolved.`,
 			return err
 		}
 		output.Header("Sync summary")
-		output.Info(fmt.Sprintf("migrated: %d, deduped: %d, linked: %d, pruned: %d, conflicts: %d",
-			res.Migrated, res.Deduped, res.Linked, res.Pruned, res.Conflicts))
+		output.Info(fmt.Sprintf("linked: %d, pruned: %d, conflicts: %d",
+			res.Linked, res.Pruned, res.Conflicts))
+		if res.Conflicts > 0 {
+			return ErrSkillsConflict
+		}
+		return nil
+	},
+}
+
+var skillsExportCmd = &cobra.Command{
+	Use:   "export <parent_folder>",
+	Short: "Copy canonical skill directories into a parent folder",
+	Long: `Copy every canonical skill under ~/ai/skills into <parent_folder>.
+
+Byte-identical destination copies are deduped. Divergent destination copies are
+reported as conflicts and never overwritten.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 1 {
+			return fmt.Errorf("exactly one parent_folder argument is required")
+		}
+		m := newManager()
+		res, err := m.Export(args[0])
+		if err != nil {
+			return err
+		}
+		output.Header("Export summary")
+		output.Info(fmt.Sprintf("exported: %d, deduped: %d, conflicts: %d",
+			res.Exported, res.Deduped, res.Conflicts))
 		if res.Conflicts > 0 {
 			return ErrSkillsConflict
 		}
@@ -166,6 +189,7 @@ func init() {
 	rootCmd.AddCommand(skillsCmd)
 	skillsCmd.AddCommand(skillsAddCmd)
 	skillsCmd.AddCommand(skillsSyncCmd)
+	skillsCmd.AddCommand(skillsExportCmd)
 	skillsCmd.AddCommand(skillsListCmd)
 	skillsCmd.AddCommand(skillsValidateCmd)
 	skillsCmd.AddCommand(skillsRemoveCmd)

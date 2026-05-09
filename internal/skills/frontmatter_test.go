@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jyablonski/arc/internal/filemode"
 )
 
 func TestParse(t *testing.T) {
@@ -66,7 +68,7 @@ func TestParse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, tt.filename)
-			if err := os.WriteFile(path, []byte(tt.body), 0o644); err != nil {
+			if err := os.WriteFile(path, []byte(tt.body), filemode.File); err != nil {
 				t.Fatal(err)
 			}
 			fm, err := Parse(path)

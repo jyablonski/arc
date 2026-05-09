@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jyablonski/arc/internal/filemode"
 )
 
 func TestDefaultPaths_EnvOverrides(t *testing.T) {
@@ -80,7 +82,7 @@ func TestNeedsSudo(t *testing.T) {
 func TestFS_SymlinkAndRemove(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target.txt")
-	if err := os.WriteFile(target, []byte("hi"), 0o644); err != nil {
+	if err := os.WriteFile(target, []byte("hi"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(dir, "link")
@@ -106,13 +108,13 @@ func TestFS_SymlinkAndRemove(t *testing.T) {
 func TestFS_CopyTree(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src")
-	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, "sub"), filemode.Dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("a"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("a"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("b"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("b"), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 	dst := filepath.Join(root, "dst")

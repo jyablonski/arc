@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMergeRefreshIntoCredentialsFile_preservesSiblingFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", ".credentials.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), filemode.Dir))
 	initial := `{
   "claudeAiOauth": {
     "accessToken": "a",

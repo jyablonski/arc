@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/jyablonski/arc/internal/filemode"
 )
 
 const defaultCacheTTL = 45 * time.Second
@@ -60,7 +62,7 @@ func WriteCache(now time.Time, report AggregateReport) error {
 		return err
 	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, filemode.Dir); err != nil {
 		return fmt.Errorf("cache mkdir: %w", err)
 	}
 	cf := cacheFile{

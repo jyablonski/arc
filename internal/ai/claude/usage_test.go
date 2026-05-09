@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,7 @@ func TestProvider_Usage_httptest(t *testing.T) {
 
 	dir := t.TempDir()
 	credPath := filepath.Join(dir, ".claude", ".credentials.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), filemode.Dir))
 	require.NoError(t, os.WriteFile(credPath, []byte(`{"claudeAiOauth":{"accessToken":"test-token"}}`), 0o600))
 
 	p := &Provider{
@@ -75,7 +76,7 @@ func TestProvider_Usage_refreshAfter401(t *testing.T) {
 
 	dir := t.TempDir()
 	credPath := filepath.Join(dir, ".claude", ".credentials.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), filemode.Dir))
 	require.NoError(t, os.WriteFile(credPath, []byte(`{
   "claudeAiOauth": {
     "accessToken": "stale",
@@ -111,7 +112,7 @@ func TestProvider_Usage_401_noRefresh_includesAnthropicMessage(t *testing.T) {
 
 	dir := t.TempDir()
 	credPath := filepath.Join(dir, ".claude", ".credentials.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), filemode.Dir))
 	require.NoError(t, os.WriteFile(credPath, []byte(`{"claudeAiOauth":{"accessToken":"only-access"}}`), 0o600))
 
 	p := &Provider{
@@ -143,7 +144,7 @@ func TestProvider_Usage_proactiveRefreshWhenExpired(t *testing.T) {
 	expired := time.Now().Add(-2 * time.Hour).UnixMilli()
 	dir := t.TempDir()
 	credPath := filepath.Join(dir, ".claude", ".credentials.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), filemode.Dir))
 	require.NoError(t, os.WriteFile(credPath, []byte(fmt.Sprintf(`{
   "claudeAiOauth": {
     "accessToken": "old",

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jyablonski/arc/internal/ai"
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +43,7 @@ func TestRunAIUsage_jsonCacheHit(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 
 	cacheDir := filepath.Join(home, ".cache", "arc")
-	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	require.NoError(t, os.MkdirAll(cacheDir, filemode.Dir))
 
 	report := ai.AggregateReport{
 		FetchedAt: time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC),

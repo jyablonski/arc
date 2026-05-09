@@ -30,10 +30,18 @@ Scaffold a new skill from the built-in template:
 arc skills add --new my-skill
 ```
 
-Migrate provider-local skills into the canonical store and ensure provider links exist:
+Ensure every canonical skill is linked into each provider. Sync is one-way:
+`~/ai/skills` is the source of truth, and provider-local real content is left
+alone for manual review.
 
 ```bash
 arc skills sync
+```
+
+Copy all canonical skills into another parent directory:
+
+```bash
+arc skills export ./skills-backup
 ```
 
 Show canonical skills and per-provider symlink status:

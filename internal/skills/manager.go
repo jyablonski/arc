@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/jyablonski/arc/internal/output"
 )
 
@@ -145,7 +146,7 @@ func (m *Manager) Add(srcPath string, force bool) error {
 		}
 	}
 
-	if err := m.mkdirAll(m.paths.SkillsRoot, 0o755); err != nil {
+	if err := m.mkdirAll(m.paths.SkillsRoot, filemode.Dir); err != nil {
 		return fmt.Errorf("mkdir %s: %w", m.paths.SkillsRoot, err)
 	}
 
@@ -157,7 +158,7 @@ func (m *Manager) Add(srcPath string, force bool) error {
 			}
 		}
 	} else {
-		if err := m.mkdirAll(destDir, 0o755); err != nil {
+		if err := m.mkdirAll(destDir, filemode.Dir); err != nil {
 			return fmt.Errorf("mkdir %s: %w", destDir, err)
 		}
 		destFile := filepath.Join(destDir, SkillFilename)
@@ -192,10 +193,10 @@ func (m *Manager) AddNew(name string) error {
 
 	m.announce("create skill scaffold %s", destDir)
 	if !m.dryRun {
-		if err := m.mkdirAll(destDir, 0o755); err != nil {
+		if err := m.mkdirAll(destDir, filemode.Dir); err != nil {
 			return fmt.Errorf("mkdir %s: %w", destDir, err)
 		}
-		if err := m.fs.WriteFile(filepath.Join(destDir, SkillFilename), buf.Bytes(), 0o644); err != nil {
+		if err := m.fs.WriteFile(filepath.Join(destDir, SkillFilename), buf.Bytes(), filemode.File); err != nil {
 			return fmt.Errorf("write SKILL.md: %w", err)
 		}
 	}
@@ -222,7 +223,7 @@ func (m *Manager) linkOne(p Provider, name, canonical string) error {
 	if !os.IsNotExist(err) {
 		return fmt.Errorf("lstat %s: %w", slot, err)
 	}
-	if err := m.mkdirAll(p.SkillsDir, 0o755); err != nil {
+	if err := m.mkdirAll(p.SkillsDir, filemode.Dir); err != nil {
 		return fmt.Errorf("mkdir %s: %w", p.SkillsDir, err)
 	}
 	m.announce("create symlink %s -> %s", slot, canonical)
@@ -279,8 +280,6 @@ func (m *Manager) moveOrCopy(src, dst string) error {
 }
 
 type SyncResult struct {
-	Migrated  int
-	Deduped   int
 	Linked    int
 	Pruned    int
 	Conflicts int
@@ -289,73 +288,8 @@ type SyncResult struct {
 func (m *Manager) Sync() (SyncResult, error) {
 	var res SyncResult
 
-	if err := m.mkdirAll(m.paths.SkillsRoot, 0o755); err != nil {
+	if err := m.mkdirAll(m.paths.SkillsRoot, filemode.Dir); err != nil {
 		return res, fmt.Errorf("mkdir %s: %w", m.paths.SkillsRoot, err)
-	}
-
-	type candidate struct {
-		provider Provider
-		path     string
-	}
-	candidates := map[string][]candidate{}
-	for _, p := range m.providers {
-		entries, err := readRealDirs(p.SkillsDir)
-		if err != nil {
-			continue
-		}
-		for _, name := range entries {
-			full := filepath.Join(p.SkillsDir, name)
-			if !hasSkillFile(full) {
-				continue
-			}
-			candidates[name] = append(candidates[name], candidate{p, full})
-		}
-	}
-
-	refused := map[string]bool{}
-	for name, cs := range candidates {
-		canonical := filepath.Join(m.paths.SkillsRoot, name)
-		if _, err := os.Stat(canonical); err == nil {
-			continue
-		}
-		if len(cs) < 2 {
-			continue
-		}
-		allSame := true
-		for i := 1; i < len(cs); i++ {
-			same, err := dirsEqual(cs[0].path, cs[i].path)
-			if err != nil || !same {
-				allSame = false
-				break
-			}
-		}
-		if !allSame {
-			refused[name] = true
-			for _, c := range cs {
-				output.Warning(fmt.Sprintf("conflict: %s in %s differs from other providers (canonical empty); refusing to migrate, resolve manually", name, c.provider.Name))
-			}
-			res.Conflicts += len(cs)
-		}
-	}
-
-	for _, p := range m.providers {
-		entries, err := readRealDirs(p.SkillsDir)
-		if err != nil {
-			continue
-		}
-		sort.Strings(entries)
-		for _, name := range entries {
-			if refused[name] {
-				continue
-			}
-			full := filepath.Join(p.SkillsDir, name)
-			if !hasSkillFile(full) {
-				continue
-			}
-			if err := m.migrateOne(p, name, full, &res); err != nil {
-				output.Warning(fmt.Sprintf("migrate %s from %s: %v", name, p.Name, err))
-			}
-		}
 	}
 
 	canonicalNames, err := m.canonicalSkills()
@@ -372,7 +306,7 @@ func (m *Manager) Sync() (SyncResult, error) {
 					output.Warning(fmt.Sprintf("lstat %s: %v", slot, lerr))
 					continue
 				}
-				if err := m.mkdirAll(p.SkillsDir, 0o755); err != nil {
+				if err := m.mkdirAll(p.SkillsDir, filemode.Dir); err != nil {
 					output.Warning(fmt.Sprintf("mkdir %s: %v", p.SkillsDir, err))
 					continue
 				}
@@ -403,46 +337,74 @@ func (m *Manager) Sync() (SyncResult, error) {
 	return res, nil
 }
 
-func (m *Manager) migrateOne(p Provider, name, providerPath string, res *SyncResult) error {
-	canonical := filepath.Join(m.paths.SkillsRoot, name)
-	if _, err := os.Stat(canonical); os.IsNotExist(err) {
-		m.announce("migrate %s (%s) -> %s", providerPath, p.Name, canonical)
-		if !m.dryRun {
-			if err := m.moveOrCopy(providerPath, canonical); err != nil {
-				return err
+type ExportResult struct {
+	Exported  int
+	Deduped   int
+	Conflicts int
+}
+
+func (m *Manager) Export(parentFolder string) (ExportResult, error) {
+	var res ExportResult
+	if parentFolder == "" {
+		return res, fmt.Errorf("parent folder is required")
+	}
+	if err := m.mkdirAll(parentFolder, filemode.Dir); err != nil {
+		return res, fmt.Errorf("mkdir %s: %w", parentFolder, err)
+	}
+	info, err := os.Stat(parentFolder)
+	if err != nil {
+		if m.dryRun && os.IsNotExist(err) {
+			names, err := m.canonicalSkills()
+			if err != nil {
+				return res, err
 			}
-			if err := m.fs.Symlink(canonical, providerPath); err != nil {
+			for _, name := range names {
+				if err := m.exportOne(name, parentFolder, &res); err != nil {
+					output.Warning(fmt.Sprintf("export %s: %v", name, err))
+				}
+			}
+			return res, nil
+		}
+		return res, fmt.Errorf("stat %s: %w", parentFolder, err)
+	}
+	if !info.IsDir() {
+		return res, fmt.Errorf("%s is not a directory", parentFolder)
+	}
+	names, err := m.canonicalSkills()
+	if err != nil {
+		return res, err
+	}
+	for _, name := range names {
+		if err := m.exportOne(name, parentFolder, &res); err != nil {
+			output.Warning(fmt.Sprintf("export %s: %v", name, err))
+		}
+	}
+	return res, nil
+}
+
+func (m *Manager) exportOne(name, parentFolder string, res *ExportResult) error {
+	src := filepath.Join(m.paths.SkillsRoot, name)
+	dest := filepath.Join(parentFolder, name)
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		m.announce("export %s -> %s", src, dest)
+		if !m.dryRun {
+			if err := m.fs.CopyTree(src, dest); err != nil {
 				return err
 			}
 		}
-		res.Migrated++
+		res.Exported++
 		return nil
 	}
-	same, err := dirsEqual(providerPath, canonical)
+	same, err := dirsEqual(src, dest)
 	if err != nil {
 		return err
 	}
 	if same {
-		m.announce("dedupe %s (byte-identical to canonical)", providerPath)
-		if !m.dryRun {
-			if err := m.fs.RemoveAll(providerPath); err != nil {
-				return err
-			}
-			if err := m.fs.Symlink(canonical, providerPath); err != nil {
-				return err
-			}
-		}
+		output.Info(fmt.Sprintf("dedupe %s (byte-identical to canonical)", dest))
 		res.Deduped++
 		return nil
 	}
-	backup := fmt.Sprintf("%s.conflict.%d", providerPath, nowUnix())
-	m.announce("move divergent copy %s -> %s", providerPath, backup)
-	if !m.dryRun {
-		if err := m.fs.Rename(providerPath, backup); err != nil {
-			return err
-		}
-	}
-	output.Warning(fmt.Sprintf("conflict: %s (%s) differs from canonical; backed up to %s", name, p.Name, backup))
+	output.Warning(fmt.Sprintf("conflict: %s differs from canonical; leaving %s unchanged", name, dest))
 	res.Conflicts++
 	return nil
 }
@@ -683,29 +645,6 @@ func (m *Manager) canonicalSkills() ([]string, error) {
 	return out, nil
 }
 
-func readRealDirs(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, e := range entries {
-		full := filepath.Join(dir, e.Name())
-		info, err := os.Lstat(full)
-		if err != nil {
-			continue
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			continue
-		}
-		if !info.IsDir() {
-			continue
-		}
-		out = append(out, e.Name())
-	}
-	return out, nil
-}
-
 func hasSkillFile(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, SkillFilename))
 	if err != nil {
@@ -816,5 +755,3 @@ func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
 		}
 	}
 }
-
-var nowUnix = func() int64 { return currentUnix() }

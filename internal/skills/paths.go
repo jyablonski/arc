@@ -76,7 +76,7 @@ func (f *FS) Rename(oldpath, newpath string) error {
 }
 
 func (f *FS) CopyTree(src, dst string) error {
-	if NeedsSudo(src) || NeedsSudo(dst) {
+	if NeedsSudo(dst) {
 		_, err := f.Sudo("cp", "-a", src, dst)
 		if err != nil {
 			return err
