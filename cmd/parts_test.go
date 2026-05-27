@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/platform"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPartsCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name        string
 		component   string
@@ -133,4 +137,31 @@ func TestPartsCmd(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPartsCmd_darwinCPU(t *testing.T) {
+	defer setAppForTest(newApp(platform.Darwin))()
+	partsComponent = "cpu"
+	t.Cleanup(func() { partsComponent = "" })
+
+	shell.SetMockRunner(&shell.MockRunner{
+		RunFunc: func(name string, args ...string) (string, error) {
+			require.Equal(t, "sysctl", name)
+			require.Equal(t, []string{"-n", "machdep.cpu.brand_string"}, args)
+			return "Apple M3 Pro", nil
+		},
+	})
+	t.Cleanup(shell.ClearMockRunner)
+
+	require.NoError(t, partsCmd.RunE(partsCmd, []string{}))
+}
+
+func TestPartsCmd_darwinGPUDriverUnsupported(t *testing.T) {
+	defer setAppForTest(newApp(platform.Darwin))()
+	partsComponent = "gpu-driver"
+	t.Cleanup(func() { partsComponent = "" })
+
+	err := partsCmd.RunE(partsCmd, []string{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "gpu-driver is only supported on Linux")
 }

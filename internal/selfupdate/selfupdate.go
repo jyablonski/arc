@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -205,5 +206,18 @@ func DownloadAndReplace(execPath, downloadURL string) error {
 		return err
 	}
 
+	removeQuarantineBestEffort(execPath)
+
 	return nil
+}
+
+func removeQuarantineBestEffort(execPath string) {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	xattr, err := exec.LookPath("xattr")
+	if err != nil {
+		return
+	}
+	_ = exec.Command(xattr, "-d", "com.apple.quarantine", execPath).Run()
 }

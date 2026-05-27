@@ -5,9 +5,10 @@ import (
 	"os"
 
 	"github.com/jyablonski/arc/internal/output"
+	"github.com/jyablonski/arc/internal/pkgmgr"
+	"github.com/jyablonski/arc/internal/platform"
 	"github.com/jyablonski/arc/internal/selfupdate"
 	"github.com/jyablonski/arc/internal/shell"
-	"github.com/jyablonski/arc/internal/sysupdate"
 	"github.com/spf13/cobra"
 )
 
@@ -23,8 +24,8 @@ var updateCmd = &cobra.Command{
 
   self   — Fetch the latest arc release from GitHub and replace this binary.
 
-  system — Full Arch workflow: pacman keyring, pacman -Syu, optional yay (--aur),
-           optional paccache cleanup, kernel bump detection and reboot prompt.
+  system — Run the host package-manager update workflow. Linux uses pacman/yay;
+           macOS uses Homebrew.
 
   uv     — Run uv self update.`,
 }
@@ -40,11 +41,15 @@ var updateSelfCmd = &cobra.Command{
 
 var updateSystemCmd = &cobra.Command{
 	Use:   "system",
-	Short: "Run system updates (pacman, yay, cache cleanup)",
-	Long: `Update the system by running pacman -Syu, optionally yay -Syu --aur,
-and cleaning the package cache with paccache -rv.`,
+	Short: "Run system package updates",
+	Long: `Update the system packages. Linux runs pacman -Syu, optionally yay -Syu --aur,
+and optional paccache cleanup. macOS runs brew update, brew upgrade, and optional
+brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return sysupdate.Run(sysupdate.Options{
+		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {
+			return fmt.Errorf("--no-aur is only supported on Linux")
+		}
+		return app.PkgMgr.UpdateSystem(pkgmgr.UpdateOptions{
 			SkipAUR:   updateNoAUR,
 			SkipCache: updateNoCache,
 		})
@@ -73,6 +78,6 @@ var updateUvCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.AddCommand(updateSelfCmd, updateSystemCmd, updateUvCmd)
-	updateSystemCmd.Flags().BoolVar(&updateNoAUR, "no-aur", false, "Skip AUR updates")
+	updateSystemCmd.Flags().BoolVar(&updateNoAUR, "no-aur", false, "Skip AUR updates on Linux")
 	updateSystemCmd.Flags().BoolVar(&updateNoCache, "no-cache", false, "Skip cache cleanup")
 }

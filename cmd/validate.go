@@ -4,17 +4,11 @@ import (
 	"fmt"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
+	"github.com/jyablonski/arc/internal/deps"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/spf13/cobra"
 )
-
-type ToolStatus struct {
-	Name        string
-	Required    bool
-	Available   bool
-	Description string
-}
 
 var validateCmd = &cobra.Command{
 	Use:   "validate",
@@ -25,25 +19,9 @@ enable additional features.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		output.Header("Validating arc dependencies")
 
-		tools := []ToolStatus{
-			// Required tools
-			{Name: "pacman", Required: true, Description: "Package manager (base system)"},
-			{Name: "systemctl", Required: true, Description: "Systemd control (base system)"},
-			{Name: "lspci", Required: true, Description: "PCI device lister (pciutils, base system)"},
-			{Name: "dmidecode", Required: true, Description: "DMI decode utility (for hardware info)"},
-			{Name: "lshw", Required: true, Description: "Hardware lister (for RAM info)"},
-			{Name: "git", Required: true, Description: "Git version control"},
-			{Name: "gh", Required: true, Description: "GitHub CLI"},
-			{Name: "fastfetch", Required: true, Description: "System info tool (for arc info)"},
-			{Name: "uv", Required: true, Description: "Python package manager"},
+		output.Info(fmt.Sprintf("Platform: %s", app.Platform))
 
-			// Optional tools
-			{Name: "yay", Required: false, Description: "AUR helper (for arc update system)"},
-			{Name: "docker", Required: false, Description: "Docker (for docker clean command)"},
-			{Name: "aws", Required: false, Description: "AWS CLI (for AWS commands)"},
-			{Name: "nvidia-smi", Required: false, Description: "NVIDIA driver (for GPU info)"},
-			{Name: "paccache", Required: false, Description: "Package cache cleaner (arc update system)"},
-		}
+		tools := append([]deps.ToolStatus(nil), app.Tools...)
 
 		// Check availability
 		for i := range tools {
@@ -51,8 +29,8 @@ enable additional features.`,
 		}
 
 		// Separate required and optional
-		required := []ToolStatus{}
-		optional := []ToolStatus{}
+		required := []deps.ToolStatus{}
+		optional := []deps.ToolStatus{}
 		for _, tool := range tools {
 			if tool.Required {
 				required = append(required, tool)

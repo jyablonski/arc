@@ -12,6 +12,7 @@ import (
 func TestCacheRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", tmp)
+	t.Setenv("HOME", tmp)
 
 	agg := AggregateReport{
 		Providers: []ProviderResult{
@@ -30,7 +31,9 @@ func TestCacheRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 
-	p := filepath.Join(tmp, "arc", "ai-usage.json")
+	cacheDir, err := CacheDir()
+	require.NoError(t, err)
+	p := filepath.Join(cacheDir, "ai-usage.json")
 	_, err = os.Stat(p)
 	require.NoError(t, err)
 }

@@ -5,11 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/platform"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCleanCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name         string
 		orphansOnly  bool
@@ -149,4 +153,30 @@ func contains(s []string, val string) bool {
 		}
 	}
 	return false
+}
+
+func TestCleanCmd_darwinRunsBrew(t *testing.T) {
+	defer setAppForTest(newApp(platform.Darwin))()
+	cleanOrphansOnly = false
+	cleanCacheOnly = false
+	t.Cleanup(func() {
+		cleanOrphansOnly = false
+		cleanCacheOnly = false
+	})
+
+	var calls [][]string
+	shell.SetMockRunner(&shell.MockRunner{
+		CommandExistsFunc: func(name string) bool { return name == "brew" },
+		RunInteractiveFunc: func(name string, args ...string) error {
+			calls = append(calls, append([]string{name}, args...))
+			return nil
+		},
+	})
+	t.Cleanup(shell.ClearMockRunner)
+
+	require.NoError(t, cleanCmd.RunE(cleanCmd, []string{}))
+	require.Equal(t, [][]string{
+		{"brew", "cleanup"},
+		{"brew", "autoremove"},
+	}, calls)
 }

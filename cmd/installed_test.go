@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/platform"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,8 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 func TestInstalledCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name        string
 		aurOnly     bool
@@ -173,4 +176,40 @@ func TestInstalledCmd(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInstalledCmd_darwinListsFormulae(t *testing.T) {
+	defer setAppForTest(newApp(platform.Darwin))()
+	installedAUROnly = false
+	installedCount = false
+	t.Cleanup(func() {
+		installedAUROnly = false
+		installedCount = false
+	})
+
+	shell.SetMockRunner(&shell.MockRunner{
+		CommandExistsFunc: func(name string) bool { return name == "brew" },
+		RunFunc: func(name string, args ...string) (string, error) {
+			require.Equal(t, "brew", name)
+			require.Equal(t, []string{"list", "--formula"}, args)
+			return "git\nuv\n", nil
+		},
+	})
+	t.Cleanup(shell.ClearMockRunner)
+
+	output := captureStdout(t, func() {
+		require.NoError(t, installedCmd.RunE(installedCmd, []string{}))
+	})
+	require.Contains(t, output, "git")
+	require.Contains(t, output, "uv")
+}
+
+func TestInstalledCmd_darwinAUROnlyUnsupported(t *testing.T) {
+	defer setAppForTest(newApp(platform.Darwin))()
+	installedAUROnly = true
+	t.Cleanup(func() { installedAUROnly = false })
+
+	err := installedCmd.RunE(installedCmd, []string{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--aur-only is only supported on Linux")
 }
