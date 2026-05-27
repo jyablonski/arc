@@ -11,6 +11,8 @@ import (
 )
 
 func TestValidateCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name           string
 		availableTools map[string]bool

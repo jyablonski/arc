@@ -10,6 +10,8 @@ import (
 )
 
 func TestSleepCmd_runsSuspend(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	isolateCommandTreeExtras(t)
 	shell.SetMockRunner(&shell.MockRunner{
 		RunFunc: func(name string, args ...string) (string, error) {

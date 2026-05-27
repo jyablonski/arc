@@ -9,6 +9,8 @@ import (
 )
 
 func TestPackagesCmd_pacmanMissing(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	isolateCommandTreeExtras(t)
 	shell.SetMockRunner(&shell.MockRunner{
 		CommandExistsFunc: func(name string) bool { return name != "pacman" },

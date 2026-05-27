@@ -11,6 +11,8 @@ import (
 )
 
 func TestPartsCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name        string
 		component   string

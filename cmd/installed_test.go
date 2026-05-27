@@ -32,6 +32,8 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 func TestInstalledCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name        string
 		aurOnly     bool

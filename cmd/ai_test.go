@@ -42,7 +42,8 @@ func TestRunAIUsage_jsonCacheHit(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 
-	cacheDir := filepath.Join(home, ".cache", "arc")
+	cacheDir, err := ai.CacheDir()
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cacheDir, filemode.Dir))
 
 	report := ai.AggregateReport{

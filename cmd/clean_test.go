@@ -12,6 +12,8 @@ import (
 )
 
 func TestCleanCmd(t *testing.T) {
+	defer setAppForTest(newApp(platform.Linux))()
+
 	tests := []struct {
 		name         string
 		orphansOnly  bool
