@@ -83,17 +83,22 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build release binary
-        run: make build
+        run: |
+          mkdir -p bin
+          GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o bin/arc-linux-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o bin/arc-darwin-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o bin/arc-darwin-amd64 .
         env:
           VERSION: ${{ steps.version.outputs.version }}
-
-      - name: Rename binary for release
-        run: mv bin/arc bin/arc-linux-amd64
+          LDFLAGS: -X github.com/jyablonski/arc/cmd.version=${{ steps.version.outputs.version }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: bin/arc-linux-amd64
+          files: |
+            bin/arc-linux-amd64
+            bin/arc-darwin-arm64
+            bin/arc-darwin-amd64
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}

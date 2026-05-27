@@ -92,3 +92,4 @@ config.local.*
 *.rpm
 .codex
 *.xml
+plans/*

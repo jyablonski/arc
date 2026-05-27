@@ -1,23 +1,17 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/jyablonski/arc/internal/output"
-	"github.com/jyablonski/arc/internal/shell"
 	"github.com/spf13/cobra"
 )
 
 var sleepCmd = &cobra.Command{
 	Use:   "sleep",
 	Short: "Suspend the system",
-	Long:  `Suspend the system using systemctl suspend.`,
+	Long:  `Suspend the system. Linux uses systemctl suspend; macOS uses pmset sleepnow.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		output.Info("Suspending system...")
-		if _, err := shell.RunSudo("systemctl", "suspend"); err != nil {
-			return fmt.Errorf("failed to suspend: %w", err)
-		}
-		return nil
+		return app.System.Sleep()
 	},
 }
 
