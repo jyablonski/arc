@@ -59,9 +59,49 @@ jobs:
       - name: Verify binary
         run: ./bin/arc --version
 
+  darwin-compile:
+    name: Darwin compile
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Compile tests for macOS
+        run: |
+          GOOS=darwin GOARCH=arm64 go test -exec=true ./...
+          GOOS=darwin GOARCH=amd64 go test -exec=true ./...
+
+  darwin-runtime:
+    name: Darwin runtime tests
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run tests
+        run: go test ./...
+
   release:
     name: Release Pipeline
-    needs: ci
+    needs: [ci, darwin-compile, darwin-runtime]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
