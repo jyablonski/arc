@@ -1,14 +1,12 @@
 # arc
 
-A personal CLI tool for system management and maintenance on Arch Linux and macOS.
+A personal CLI tool for system management and maintenance on Arch Linux and macOS (my 2 primary platforms).
 
 ## What It Does
 
 `arc` consolidates common system tasks into a single command-line tool. It provides a consistent interface for system operations with better argument handling, help text, colored output, and error handling.
 
-## Why
-
-`arc` is for maintenance tasks that are too important or too fiddly to leave as one-off shell snippets.
+The purpose is to simplify maintenance tasks, provide AI tooling, and create a single CLI that I can use to manage my systems in a standardized way.
 
 It wraps those workflows with:
 
@@ -23,13 +21,11 @@ Instead of remembering scattered commands or maintaining shell aliases:
 # Before
 sudo pacman -Syu && yay -Syu --aur && sudo paccache -rv
 pacman -Qi | awk '/^Name/ {name=$3} /^Installed Size/ {print $4, $5, name}' | sort -h | tail -25
-aws sts get-caller-identity && aws iam create-access-key --user-name "$USER" && aws configure
 # Check Claude, Codex, and Cursor usage separately
 
 # After
 arc update system
 arc packages --top 25
-arc aws rotate-keys
 arc ai usage
 ```
 

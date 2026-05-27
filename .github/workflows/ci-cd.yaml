@@ -59,6 +59,7 @@ jobs:
       - name: Verify binary
         run: ./bin/arc --version
 
+  # ensure tests can compile for darwin while on linux
   darwin-compile:
     name: Darwin compile
     runs-on: ubuntu-latest
@@ -80,6 +81,7 @@ jobs:
           GOOS=darwin GOARCH=arm64 go test -exec=true ./...
           GOOS=darwin GOARCH=amd64 go test -exec=true ./...
 
+  # ensure tests can run in macos env
   darwin-runtime:
     name: Darwin runtime tests
     runs-on: macos-latest
