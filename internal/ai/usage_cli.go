@@ -50,7 +50,7 @@ func EncodeAggregateJSON(w io.Writer, agg AggregateReport) error {
 
 func ExitErrorIfAllProvidersFailed(agg AggregateReport) error {
 	if len(agg.Providers) == 0 {
-		return fmt.Errorf("no providers selected")
+		return ErrNoProvidersSelected
 	}
 	anyOK := false
 	for _, p := range agg.Providers {

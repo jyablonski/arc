@@ -20,7 +20,7 @@ func TestEnabled(t *testing.T) {
 		{name: "one enables extra commands", value: ptr("1"), expected: true},
 		{name: "true enables extra commands", value: ptr("true"), expected: true},
 		{name: "false disables extra commands", value: ptr("false"), expected: false},
-		{name: "invalid value disables extra commands", value: ptr("gh restart-dashboard"), expected: false},
+		{name: "invalid value disables extra commands", value: ptr("yes please"), expected: false},
 	}
 
 	for _, tt := range tests {

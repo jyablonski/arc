@@ -27,6 +27,7 @@ pacman -Qi | awk '/^Name/ {name=$3} /^Installed Size/ {print $4, $5, name}' | so
 arc update system
 arc packages --top 25
 arc ai usage
+arc ai tokens
 ```
 
 ## Installation
@@ -94,6 +95,7 @@ arc update self
 | `validate`      | Arch dependency checks             | macOS dependency checks        | `arc validate`                 |
 | `setup`         | installs tools with pacman         | installs tools with Homebrew   | `arc setup`                    |
 | `ai usage`      | AI coding tool usage               | AI coding tool usage           | `arc ai usage`                 |
+| `ai tokens`     | Local AI token usage and cost      | Local AI token usage and cost  | `arc ai tokens`                |
 | `skills`        | Shared AI/LLM skills               | Shared AI/LLM skills           | `arc skills sync`              |
 | `rules`         | Shared AGENTS.md rules             | Shared AGENTS.md rules         | `arc rules sync`               |
 
@@ -106,6 +108,7 @@ Use `arc <command> --help` for detailed flag information.
 More detailed notes are available in `docs/`:
 
 - [AI usage](docs/ai_usage.md)
+- [AI tokens](docs/ai_tokens.md)
 - [Shared skills](docs/skills.md)
 - [Shared rules](docs/rules.md)
 
@@ -117,41 +120,6 @@ make install   # Build and install to ~/.local/bin
 make test      # Run tests
 make fmt       # Format code
 make lint      # Run linter
-```
-
-## Project Structure
-
-```
-├── main.go
-├── go.mod
-├── go.sum
-├── cmd/
-│   ├── root.go           # root command, global flags
-│   ├── update.go         # arc update {system,self,uv}
-│   ├── clean.go          # package cache and orphan removal
-│   ├── ...               # one file per command group (Cobra wiring only)
-├── internal/
-│   ├── arcerrs/          # shared sentinel errors for CLI exit behavior
-│   ├── extracmd/         # ARC_EXTRA_COMMANDS visibility for admin-only commands
-│   ├── shell/
-│   │   └── exec.go       # wrapper for running shell commands
-│   ├── output/
-│   │   └── format.go     # manages colored output, tables, formatting
-│   ├── brew/
-│   │   └── brew.go       # Homebrew-specific parsing and helpers
-│   ├── pacman/
-│   │   └── pacman.go     # pacman-specific parsing and helpers (+ kernel list)
-│   ├── platform/         # typed platform detection
-│   ├── pkgmgr/           # package-manager boundary (pacman/Homebrew)
-│   ├── syscontrol/       # suspend / system-control boundary
-│   ├── hardware/         # platform-specific hardware reporting
-│   ├── setupdeps/        # platform-specific setup dependency installer
-│   ├── deps/             # validate command dependency lists
-│   ├── selfupdate/       # arc update self
-│   ├── sysupdate/        # arc update system
-│   ├── ghworkflow/       # arc gh restart-dashboard
-│   ├── gitcleanup/       # arc git cleanup
-│   └── skills/           # shared AI skills, provider paths, sync, validation
 ```
 
 ## License

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/brew"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/platform"
@@ -76,7 +77,7 @@ func (darwinManager) Clean(opts CleanOptions) error {
 
 func (darwinManager) Installed(opts InstalledOptions) error {
 	if opts.ForeignOnly {
-		return fmt.Errorf("--aur-only is only supported on Linux")
+		return arcerrs.ErrAUROnlyLinuxOnly
 	}
 	if err := brew.CheckAvailable(); err != nil {
 		return err
