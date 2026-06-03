@@ -32,6 +32,16 @@ func ValidateProviderFilters(filters []string) error {
 	return nil
 }
 
+func ValidateHistoryProviderFilters(filters []string) error {
+	known := map[string]struct{}{"claude": {}, "codex": {}}
+	for _, f := range filters {
+		if _, ok := known[f]; !ok {
+			return fmt.Errorf("unknown provider %q (claude, codex)", f)
+		}
+	}
+	return nil
+}
+
 func EncodeAggregateJSON(w io.Writer, agg AggregateReport) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
