@@ -157,27 +157,4 @@ func TestCommands(t *testing.T) {
 		}
 	})
 
-	t.Run("When admin commands are enabled, they are exposed", func(t *testing.T) {
-		oldValue, hadValue := os.LookupEnv(extracmd.EnvVar)
-		defer func() {
-			if hadValue {
-				_ = os.Setenv(extracmd.EnvVar, oldValue)
-			} else {
-				_ = os.Unsetenv(extracmd.EnvVar)
-			}
-			extracmd.ApplyVisibility()
-		}()
-
-		_ = os.Setenv(extracmd.EnvVar, "1")
-		extracmd.ApplyVisibility()
-
-		allCommands := getAllCommands(rootCmd, "")
-		actualMap := make(map[string]bool)
-		for _, cmd := range allCommands {
-			actualMap[cmd] = true
-		}
-
-		assert.True(t, actualMap["gh"])
-		assert.True(t, actualMap["gh restart-dashboard"])
-	})
 }

@@ -9,11 +9,15 @@ var (
 
 	ErrAllNotifiersFailed = errors.New("failed to send incident to all configured destinations")
 
-	ErrNoWorkflowRuns = errors.New("no workflow runs found")
-
 	ErrNoUserARN = errors.New("failed to get user ARN")
 
 	ErrValidationFailed = errors.New("validation failed: missing required tools")
 
 	ErrNotGitRepo = errors.New("not in a git repository")
+
+	ErrEmptyProviderFilter = errors.New("--provider: empty after parsing")
+
+	ErrAUROnlyLinuxOnly = errors.New("--aur-only is only supported on Linux")
+
+	ErrNoAURLinuxOnly = errors.New("--no-aur is only supported on Linux")
 )

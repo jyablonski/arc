@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/pkgmgr"
 	"github.com/jyablonski/arc/internal/platform"
@@ -47,7 +48,7 @@ and optional paccache cleanup. macOS runs brew update, brew upgrade, and optiona
 brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {
-			return fmt.Errorf("--no-aur is only supported on Linux")
+			return arcerrs.ErrNoAURLinuxOnly
 		}
 		return app.PkgMgr.UpdateSystem(pkgmgr.UpdateOptions{
 			SkipAUR:   updateNoAUR,

@@ -13,6 +13,7 @@ import (
 	aicodex "github.com/jyablonski/arc/internal/ai/codex"
 	aicursor "github.com/jyablonski/arc/internal/ai/cursor"
 	"github.com/jyablonski/arc/internal/ai/presentation"
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/spf13/cobra"
 )
 
@@ -64,7 +65,7 @@ func runAIUsage(cmd *cobra.Command, args []string) error {
 
 	filters := ai.ParseProviderCSV(aiUsageProvider)
 	if aiUsageProvider != "" && len(filters) == 0 {
-		return fmt.Errorf("--provider: empty after parsing")
+		return arcerrs.ErrEmptyProviderFilter
 	}
 	if err := ai.ValidateProviderFilters(filters); err != nil {
 		return err
@@ -110,7 +111,7 @@ func runAITokens(cmd *cobra.Command, args []string) error {
 
 	filters := ai.ParseProviderCSV(aiTokensProvider)
 	if aiTokensProvider != "" && len(filters) == 0 {
-		return fmt.Errorf("--provider: empty after parsing")
+		return arcerrs.ErrEmptyProviderFilter
 	}
 	if err := ai.ValidateHistoryProviderFilters(filters); err != nil {
 		return err

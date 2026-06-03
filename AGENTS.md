@@ -34,9 +34,9 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 - `internal/brew` — Homebrew helpers for macOS package commands
 - `internal/pacman` — pacman helpers for Linux package commands
 - `internal/sysupdate` — Linux `arc update system` workflow
-- `internal/ghworkflow` — `arc gh restart-dashboard` logic
 - `internal/gitcleanup` — `arc git cleanup` logic
 - `internal/selfupdate` — `arc update self`
+- `internal/ai` — `arc ai usage` (live provider quota, networked) and `arc ai tokens` (local Claude/Codex session-log token history priced via built-in `internal/ai/pricing.go`, no network). See `docs/ai_tokens.md`.
 
 ## Adding commands
 

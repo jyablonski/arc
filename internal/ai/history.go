@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+// ErrNoProvidersSelected is returned by the exit-status helpers when a report
+// contains no providers (e.g. an over-narrow --provider filter).
+var ErrNoProvidersSelected = errors.New("no providers selected")
+
 type TokenBreakdown struct {
 	Input      int64 `json:"input"`
 	Output     int64 `json:"output"`
@@ -377,7 +381,7 @@ func EncodeHistoryJSON(w io.Writer, report HistoryReport) error {
 
 func ExitErrorIfAllHistoryProvidersFailed(report HistoryReport) error {
 	if len(report.Providers) == 0 {
-		return fmt.Errorf("no providers selected")
+		return ErrNoProvidersSelected
 	}
 	anyOK := false
 	for _, p := range report.Providers {

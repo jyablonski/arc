@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/pkgmgr"
 	"github.com/jyablonski/arc/internal/platform"
 	"github.com/spf13/cobra"
@@ -20,7 +19,7 @@ var installedCmd = &cobra.Command{
 Linux uses pacman -Qe. macOS lists installed Homebrew formulae.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if installedAUROnly && app.Platform != platform.Linux {
-			return fmt.Errorf("--aur-only is only supported on Linux")
+			return arcerrs.ErrAUROnlyLinuxOnly
 		}
 		return app.PkgMgr.Installed(pkgmgr.InstalledOptions{
 			ForeignOnly: installedAUROnly,
