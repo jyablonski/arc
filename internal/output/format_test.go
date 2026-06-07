@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/fatih/color"
@@ -115,10 +116,38 @@ func TestTable(t *testing.T) {
 			Table(headers, rows)
 		})
 
-		assert.Contains(t, stdout, "Name")
-		assert.Contains(t, stdout, "Size")
+		// Headers are lowercased into the canonical format.
+		assert.Contains(t, stdout, "name")
+		assert.Contains(t, stdout, "size")
+		assert.NotContains(t, stdout, "Name")
 		assert.Contains(t, stdout, "package1")
 		assert.Contains(t, stdout, "package2")
+	})
+}
+
+func TestTableLines(t *testing.T) {
+	t.Run("lowercases headers and underlines each column", func(t *testing.T) {
+		lines := TableLines(
+			[]string{"NAME", "STATUS"},
+			[][]string{{"demo", "ok"}},
+		)
+		require.Len(t, lines, 3)
+		assert.Equal(t, "name  status", lines[0])
+		assert.Equal(t, "----  ------", lines[1])
+		assert.Equal(t, "demo  ok", lines[2])
+	})
+
+	t.Run("trims trailing whitespace from padded cells", func(t *testing.T) {
+		lines := TableLines(
+			[]string{"group", "api equiv"},
+			[][]string{
+				{"codex", "$3.47  "},
+				{"total", "$10.79"},
+			},
+		)
+		for _, line := range lines {
+			assert.False(t, strings.HasSuffix(line, " "), line)
+		}
 	})
 }
 

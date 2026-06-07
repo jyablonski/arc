@@ -2,7 +2,6 @@ package presentation
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/jyablonski/arc/internal/output"
@@ -20,7 +19,7 @@ func PrintHistory(report ai.HistoryReport, opts HistoryPrintOptions) {
 	}
 
 	headers, rows := historyRows(report, opts)
-	printAlignedTable(headers, rows)
+	output.Table(headers, rows)
 }
 
 func historyRows(report ai.HistoryReport, opts HistoryPrintOptions) ([]string, [][]string) {
@@ -140,48 +139,6 @@ func alignNumericColumns(rows [][]string, headers []string) {
 	}
 }
 
-func printAlignedTable(headers []string, rows [][]string) {
-	for _, line := range alignedTableLines(headers, rows) {
-		fmt.Println(line)
-	}
-}
-
-func alignedTableLines(headers []string, rows [][]string) []string {
-	widths := make([]int, len(headers))
-	for i, h := range headers {
-		widths[i] = len(h)
-	}
-	for _, row := range rows {
-		for i, cell := range row {
-			if len(cell) > widths[i] {
-				widths[i] = len(cell)
-			}
-		}
-	}
-
-	lines := make([]string, 0, len(rows)+2)
-	appendRow := func(cells []string) {
-		var b strings.Builder
-		for i, cell := range cells {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			fmt.Fprintf(&b, "%-*s", widths[i], cell)
-		}
-		lines = append(lines, strings.TrimRight(b.String(), " "))
-	}
-	appendRow(headers)
-	parts := make([]string, len(widths))
-	for i, w := range widths {
-		parts[i] = strings.Repeat("-", w)
-	}
-	appendRow(parts)
-	for _, row := range rows {
-		appendRow(row)
-	}
-	return lines
-}
-
 type ROIEntry struct {
 	Provider        string
 	EquivalentCost  float64
@@ -218,8 +175,9 @@ func PrintROISummary(summary ROISummary) {
 		formatCurrency(summary.SubscriptionCost, true, false),
 		formatMultiple(summary.Multiple),
 	})
-	alignNumericColumns(rows, []string{"provider", "api equiv", "subscription", "multiple"})
-	printAlignedTable([]string{"provider", "api equiv", "subscription", "multiple"}, rows)
+	headers := []string{"provider", "api equiv", "subscription", "multiple"}
+	alignNumericColumns(rows, headers)
+	output.Table(headers, rows)
 }
 
 func formatMultiple(v float64) string {
