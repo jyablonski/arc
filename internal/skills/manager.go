@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"text/template"
 
 	"github.com/jyablonski/arc/internal/filemode"
@@ -734,9 +733,9 @@ func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
 		_, _ = fmt.Fprintln(w, "no skills found in canonical dir")
 		return
 	}
-	headers := []string{"NAME", "CANONICAL"}
+	headers := []string{"name", "canonical"}
 	for _, p := range providers {
-		headers = append(headers, strings.ToUpper(p.Name))
+		headers = append(headers, p.Name)
 	}
 	rows := make([][]string, 0, len(res.Skills))
 	for _, e := range res.Skills {
@@ -746,7 +745,7 @@ func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
 		}
 		rows = append(rows, row)
 	}
-	output.Table(headers, rows)
+	output.FprintTable(w, headers, rows)
 	if len(res.Conflicts) > 0 {
 		_, _ = fmt.Fprintln(w)
 		_, _ = fmt.Fprintln(w, "Conflict backups (manual review):")

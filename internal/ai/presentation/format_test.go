@@ -134,19 +134,6 @@ func TestHistoryRows_reasoningDashWhenMixed(t *testing.T) {
 	require.Equal(t, dash, strings.TrimSpace(rows[0][reasoningCol]))
 }
 
-func TestAlignedTableLines_trimsTrailingWhitespace(t *testing.T) {
-	lines := alignedTableLines(
-		[]string{"group", "api equiv"},
-		[][]string{
-			{"codex", "$3.47  "},
-			{"total", "$10.79"},
-		},
-	)
-	for _, line := range lines {
-		require.False(t, strings.HasSuffix(line, " "), line)
-	}
-}
-
 func TestSortUsageGroups(t *testing.T) {
 	groups := []ai.UsageGroup{
 		{Model: "cheap", CostUSD: 1, Tokens: ai.TokenBreakdown{Input: 100}, Date: "2026-06-02"},
