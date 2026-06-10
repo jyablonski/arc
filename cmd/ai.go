@@ -237,7 +237,7 @@ func init() {
 	aiTokensCmd.Flags().StringVar(&aiTokensSince, "since", "", "Only records on or after this date (YYYY-MM-DD or RFC3339)")
 	aiTokensCmd.Flags().StringVar(&aiTokensUntil, "until", "", "Only records on or before this date (YYYY-MM-DD or RFC3339)")
 	aiTokensCmd.Flags().StringVar(&aiTokensGroupBy, "group-by", "provider,model", "Group by: provider, model, provider,model, date, session,model")
-	aiTokensCmd.Flags().StringVar(&aiTokensSortBy, "sort-by", "", "Sort by: cost, tokens, date, group (default cost desc; date asc for --group-by date)")
+	aiTokensCmd.Flags().StringVar(&aiTokensSortBy, "sort-by", "", "Sort by: cluster, cost, tokens, date, group (default cluster desc, grouping rows by provider; date asc for --group-by date)")
 	aiTokensCmd.Flags().StringVar(&aiTokensSortOrder, "sort-order", "", "Sort order: asc, desc")
 	aiTokensCmd.Flags().BoolVar(&aiTokensShowTotalTokens, "show-total-tokens", false, "Show the aggregate token total column; hidden by default because cache reads can dominate raw totals")
 	aiCmd.AddCommand(aiUsageCmd)

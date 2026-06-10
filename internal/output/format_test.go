@@ -137,6 +137,21 @@ func TestTableLines(t *testing.T) {
 		assert.Equal(t, "demo  ok", lines[2])
 	})
 
+	t.Run("aligns cells by visible width ignoring ANSI color codes", func(t *testing.T) {
+		colored := "\x1b[38;2;255;133;31mclaude/opus\x1b[0m" // 11 visible runes
+		lines := TableLines(
+			[]string{"group", "share"},
+			[][]string{
+				{colored, "64.5%"},
+				{"codex/gpt-5", "35.5%"},
+			},
+		)
+		// Both group cells have 11 visible runes, so the share column must
+		// start at the same offset on both data rows.
+		plain := ansiPattern.ReplaceAllString(lines[2], "")
+		require.Equal(t, strings.Index(plain, "64.5%"), strings.Index(lines[3], "35.5%"))
+	})
+
 	t.Run("trims trailing whitespace from padded cells", func(t *testing.T) {
 		lines := TableLines(
 			[]string{"group", "api equiv"},

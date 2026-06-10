@@ -41,16 +41,16 @@ arc ai tokens --show-total-tokens
 
 ### Flags
 
-| Flag                  | Values                                                         | Default          | Notes                                                                                             |
-| --------------------- | -------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------- |
-| `--provider`          | comma-separated: `claude`, `codex`                             | all              | Filters which local logs are scanned.                                                             |
-| `--since`             | `YYYY-MM-DD` or RFC3339                                        | unbounded        | Keep records on or after this date.                                                               |
-| `--until`             | `YYYY-MM-DD` or RFC3339                                        | unbounded        | Keep records on or before this date. Must be on or after `--since`.                               |
-| `--group-by`          | `provider`, `model`, `provider,model`, `date`, `session,model` | `provider,model` | How rows are aggregated.                                                                          |
-| `--sort-by`           | `cost`, `tokens`, `date`, `group`                              | `cost` desc      | `date` asc when `--group-by date`.                                                                |
-| `--sort-order`        | `asc`, `desc`                                                  | `desc`           | `asc` when sorting by `date` under `--group-by date`.                                             |
-| `--show-total-tokens` | bool                                                           | `false`          | Adds the aggregate token-total column; hidden by default because cache reads dominate raw totals. |
-| `-j` / `--json`       | bool                                                           | `false`          | Emits the full `HistoryReport` (per-provider results, groups, and totals).                        |
+| Flag                  | Values                                                         | Default          | Notes                                                                                                                                                           |
+| --------------------- | -------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--provider`          | comma-separated: `claude`, `codex`                             | all              | Filters which local logs are scanned.                                                                                                                           |
+| `--since`             | `YYYY-MM-DD` or RFC3339                                        | unbounded        | Keep records on or after this date.                                                                                                                             |
+| `--until`             | `YYYY-MM-DD` or RFC3339                                        | unbounded        | Keep records on or before this date. Must be on or after `--since`.                                                                                             |
+| `--group-by`          | `provider`, `model`, `provider,model`, `date`, `session,model` | `provider,model` | How rows are aggregated.                                                                                                                                        |
+| `--sort-by`           | `cluster`, `cost`, `tokens`, `date`, `group`                   | `cluster` desc   | `cluster` bands rows by provider (providers by combined cost, models by cost within); matches the per-provider row coloring. `date` asc when `--group-by date`. |
+| `--sort-order`        | `asc`, `desc`                                                  | `desc`           | `asc` when sorting by `date` under `--group-by date`.                                                                                                           |
+| `--show-total-tokens` | bool                                                           | `false`          | Adds the aggregate token-total column; hidden by default because cache reads dominate raw totals.                                                               |
+| `-j` / `--json`       | bool                                                           | `false`          | Emits the full `HistoryReport` (per-provider results, groups, and totals).                                                                                      |
 
 - Exit code is non-zero only if every selected provider fails.
 - The default table hides the raw token total: cache-read tokens are cheap but voluminous, so summed totals are misleading. The cost column is the more meaningful comparison; use `--show-total-tokens` if you want the raw number anyway.
