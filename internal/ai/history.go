@@ -191,9 +191,9 @@ func ValidateHistoryGroupBy(s string) error {
 
 func ValidateHistorySort(sortBy, sortOrder string) error {
 	switch strings.ToLower(strings.TrimSpace(sortBy)) {
-	case "", "cost", "tokens", "date", "group":
+	case "", "cost", "tokens", "date", "group", "cluster":
 	default:
-		return fmt.Errorf("unknown sort-by %q (cost, tokens, date, group)", sortBy)
+		return fmt.Errorf("unknown sort-by %q (cluster, cost, tokens, date, group)", sortBy)
 	}
 	switch strings.ToLower(strings.TrimSpace(sortOrder)) {
 	case "", "asc", "desc":
@@ -208,7 +208,10 @@ func NormalizeHistorySort(groupBy, sortBy, sortOrder string) (string, string) {
 	sortBy = strings.ToLower(strings.TrimSpace(sortBy))
 	sortOrder = strings.ToLower(strings.TrimSpace(sortOrder))
 	if sortBy == "" {
-		sortBy = "cost"
+		// Default clusters rows into per-provider bands (providers ordered by
+		// combined cost, models by cost within), which reads cleanly alongside
+		// the per-provider row coloring. Date tables stay chronological.
+		sortBy = "cluster"
 		if groupBy == "date" {
 			sortBy = "date"
 		}
@@ -260,12 +263,46 @@ func SortUsageGroups(groups []UsageGroup, groupBy, sortBy, sortOrder string) {
 	groupBy = normalizeHistoryGroupBy(groupBy)
 	sortBy, sortOrder = NormalizeHistorySort(groupBy, sortBy, sortOrder)
 	asc := sortOrder == "asc"
+	if sortBy == "cluster" {
+		sortClusteredByProvider(groups, asc)
+		return
+	}
 	sort.SliceStable(groups, func(i, j int) bool {
 		cmp := compareUsageGroup(groups[i], groups[j], sortBy, groupBy)
 		if asc {
 			return cmp < 0
 		}
 		return cmp > 0
+	})
+}
+
+// sortClusteredByProvider groups rows into contiguous per-provider bands ordered
+// by each provider's combined cost, with rows sorted by cost within a band.
+// Groups without a provider (e.g. --group-by model) collapse to a plain cost
+// sort. The order honors sortOrder; provider name breaks ties deterministically.
+func sortClusteredByProvider(groups []UsageGroup, asc bool) {
+	providerCost := map[string]float64{}
+	for _, g := range groups {
+		providerCost[g.Provider] += g.CostUSD
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		a, b := groups[i], groups[j]
+		if a.Provider != b.Provider {
+			if ca, cb := providerCost[a.Provider], providerCost[b.Provider]; ca != cb {
+				if asc {
+					return ca < cb
+				}
+				return ca > cb
+			}
+			return a.Provider < b.Provider
+		}
+		if a.CostUSD != b.CostUSD {
+			if asc {
+				return a.CostUSD < b.CostUSD
+			}
+			return a.CostUSD > b.CostUSD
+		}
+		return false
 	})
 }
 

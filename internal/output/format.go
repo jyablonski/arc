@@ -4,10 +4,20 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/fatih/color"
 )
+
+// ansiPattern matches SGR escape sequences (e.g. color codes) so table layout
+// can measure and pad cells by their visible width rather than byte length.
+var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// visibleWidth returns the display width of s with ANSI escape sequences removed.
+func visibleWidth(s string) int {
+	return len([]rune(ansiPattern.ReplaceAllString(s, "")))
+}
 
 var (
 	headerColor  = color.New(color.FgCyan, color.Bold)
@@ -74,12 +84,12 @@ func TableLines(headers []string, rows [][]string) []string {
 	widths := make([]int, len(headers))
 	for i, h := range headers {
 		cols[i] = strings.ToLower(h)
-		widths[i] = len(cols[i])
+		widths[i] = visibleWidth(cols[i])
 	}
 	for _, row := range rows {
 		for i, cell := range row {
-			if i < len(widths) && len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if w := visibleWidth(cell); i < len(widths) && w > widths[i] {
+				widths[i] = w
 			}
 		}
 	}
@@ -91,7 +101,10 @@ func TableLines(headers []string, rows [][]string) []string {
 			if i > 0 {
 				b.WriteString("  ")
 			}
-			fmt.Fprintf(&b, "%-*s", widths[i], cell)
+			b.WriteString(cell)
+			if pad := widths[i] - visibleWidth(cell); pad > 0 {
+				b.WriteString(strings.Repeat(" ", pad))
+			}
 		}
 		lines = append(lines, strings.TrimRight(b.String(), " "))
 	}

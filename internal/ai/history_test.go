@@ -40,6 +40,49 @@ func TestGroupTokenRecords_providerModel(t *testing.T) {
 	require.Equal(t, 2, groups[0].Records)
 }
 
+func TestNormalizeHistorySort_defaultsToClusterExceptDate(t *testing.T) {
+	sortBy, sortOrder := NormalizeHistorySort("provider,model", "", "")
+	require.Equal(t, "cluster", sortBy)
+	require.Equal(t, "desc", sortOrder)
+
+	sortBy, sortOrder = NormalizeHistorySort("date", "", "")
+	require.Equal(t, "date", sortBy)
+	require.Equal(t, "asc", sortOrder)
+}
+
+func TestSortUsageGroups_clusterBandsByProvider(t *testing.T) {
+	groups := []UsageGroup{
+		{Provider: "codex", Model: "gpt-5.5", CostUSD: 386},
+		{Provider: "claude", Model: "opus-4-8", CostUSD: 157},
+		{Provider: "codex", Model: "gpt-5.4", CostUSD: 54},
+		{Provider: "claude", Model: "opus-4-7", CostUSD: 33},
+		{Provider: "codex", Model: "gpt-5.3", CostUSD: 2},
+	}
+	// Default (empty) sort clusters by provider: codex combined ($442) outranks
+	// claude ($190), and models are cost-desc within each band.
+	SortUsageGroups(groups, "provider,model", "", "")
+	got := make([]string, len(groups))
+	for i, g := range groups {
+		got[i] = g.Provider + "/" + g.Model
+	}
+	require.Equal(t, []string{
+		"codex/gpt-5.5", "codex/gpt-5.4", "codex/gpt-5.3",
+		"claude/opus-4-8", "claude/opus-4-7",
+	}, got)
+}
+
+func TestSortUsageGroups_explicitCostStaysFlat(t *testing.T) {
+	groups := []UsageGroup{
+		{Provider: "codex", Model: "gpt-5.5", CostUSD: 386},
+		{Provider: "claude", Model: "opus-4-8", CostUSD: 157},
+		{Provider: "codex", Model: "gpt-5.3", CostUSD: 2},
+	}
+	SortUsageGroups(groups, "provider,model", "cost", "desc")
+	require.Equal(t, "codex", groups[0].Provider)
+	require.Equal(t, "claude", groups[1].Provider)
+	require.Equal(t, "codex", groups[2].Provider)
+}
+
 func TestRunHistoryProviders_pricesAndJSON(t *testing.T) {
 	ts := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	p := fakeHistoryProvider{

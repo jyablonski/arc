@@ -67,17 +67,18 @@ func shouldUseAdaptiveCurrency(report ai.HistoryReport) bool {
 }
 
 func groupCells(g ai.UsageGroup, groupBy string) []string {
+	accent := providerAccent(g.Provider)
 	switch groupBy {
 	case "provider":
-		return []string{g.Provider}
+		return []string{accent.Sprint(g.Provider)}
 	case "model":
-		return []string{g.Model}
+		return []string{accent.Sprint(g.Model)}
 	case "date":
 		return []string{g.Date}
 	case "session,model":
-		return []string{g.Provider, shortSessionID(g.SessionID), g.Model}
+		return []string{accent.Sprint(g.Provider), shortSessionID(g.SessionID), accent.Sprint(g.Model)}
 	default:
-		return []string{g.Provider + "/" + g.Model}
+		return []string{accent.Sprint(g.Provider + "/" + g.Model)}
 	}
 }
 
