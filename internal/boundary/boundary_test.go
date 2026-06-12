@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/jyablonski/arc/internal/boundary"
-	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,39 +37,17 @@ func TestDefaultShell_isShellRunner(t *testing.T) {
 	require.NotNil(t, r)
 }
 
-func TestDefaultShell_delegatesToShellMock(t *testing.T) {
+// DefaultShell is a thin passthrough to the real OS exec; this exercises it
+// against harmless real commands (no global mock involved).
+func TestDefaultShell_realExec(t *testing.T) {
 	t.Run("Run", func(t *testing.T) {
-		shell.SetMockRunner(&shell.MockRunner{
-			RunFunc: func(name string, args ...string) (string, error) {
-				require.Equal(t, "echo", name)
-				require.Equal(t, []string{"ok"}, args)
-				return "hi", nil
-			},
-		})
-		t.Cleanup(shell.ClearMockRunner)
 		out, err := boundary.DefaultShell.Run("echo", "ok")
 		require.NoError(t, err)
-		require.Equal(t, "hi", out)
-	})
-	t.Run("RunInteractive", func(t *testing.T) {
-		shell.SetMockRunner(&shell.MockRunner{
-			RunInteractiveFunc: func(name string, args ...string) error {
-				require.Equal(t, "vim", name)
-				return nil
-			},
-		})
-		t.Cleanup(shell.ClearMockRunner)
-		require.NoError(t, boundary.DefaultShell.RunInteractive("vim"))
+		require.Equal(t, "ok", out)
 	})
 	t.Run("CommandExists", func(t *testing.T) {
-		shell.SetMockRunner(&shell.MockRunner{
-			CommandExistsFunc: func(name string) bool {
-				return name == "gh"
-			},
-		})
-		t.Cleanup(shell.ClearMockRunner)
-		require.True(t, boundary.DefaultShell.CommandExists("gh"))
-		require.False(t, boundary.DefaultShell.CommandExists("missing-tool"))
+		require.True(t, boundary.DefaultShell.CommandExists("sh"))
+		require.False(t, boundary.DefaultShell.CommandExists("definitely-not-a-real-tool-xyz123"))
 	})
 }
 

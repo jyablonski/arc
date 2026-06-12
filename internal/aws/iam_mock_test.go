@@ -4,10 +4,20 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jyablonski/arc/internal/shell"
+	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// setRunner swaps this package's subprocess seam for the duration of a test and
+// restores it afterwards; the swap is scoped to the test via t.Cleanup so
+// nothing leaks between tests.
+func setRunner(t *testing.T, m boundary.ShellRunner) {
+	t.Helper()
+	prev := run
+	run = m
+	t.Cleanup(func() { run = prev })
+}
 
 func TestGetCurrentIdentity(t *testing.T) {
 	tests := []struct {
@@ -44,8 +54,7 @@ func TestGetCurrentIdentity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "aws" && len(args) >= 2 && args[0] == "sts" && args[1] == "get-caller-identity" {
 						return tt.mockOutput, tt.mockError
@@ -53,8 +62,7 @@ func TestGetCurrentIdentity(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			identity, err := GetCurrentIdentity()
 
@@ -131,8 +139,7 @@ func TestListAccessKeys(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "aws" && len(args) >= 4 && args[0] == "iam" && args[1] == "list-access-keys" {
 						return tt.mockOutput, tt.mockError
@@ -140,8 +147,7 @@ func TestListAccessKeys(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			keys, err := ListAccessKeys(tt.username)
 
@@ -152,6 +158,10 @@ func TestListAccessKeys(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedKeys, keys)
+
+			// The username must be threaded through to the CLI invocation.
+			require.Len(t, mock.RunCalls(), 1)
+			assert.Equal(t, []string{"iam", "list-access-keys", "--user-name", tt.username}, mock.RunCalls()[0].Args)
 		})
 	}
 }
@@ -198,8 +208,7 @@ func TestCreateAccessKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "aws" && len(args) >= 4 && args[0] == "iam" && args[1] == "create-access-key" {
 						return tt.mockOutput, tt.mockError
@@ -207,8 +216,7 @@ func TestCreateAccessKey(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			keyID, secretKey, err := CreateAccessKey(tt.username)
 
@@ -250,8 +258,7 @@ func TestDeleteAccessKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "aws" && len(args) >= 6 && args[0] == "iam" && args[1] == "delete-access-key" {
 						return "", tt.mockError
@@ -259,8 +266,7 @@ func TestDeleteAccessKey(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			err := DeleteAccessKey(tt.username, tt.keyID)
 

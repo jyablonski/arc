@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jyablonski/arc/internal/shell"
+	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +58,7 @@ linux-lts-headers 5.15.0-1`,
 }
 
 func TestInstalledKernelVersionsPacmanErrors(t *testing.T) {
-	mock := &shell.MockRunner{
+	mock := &boundary.ShellRunnerMock{
 		RunFunc: func(name string, args ...string) (string, error) {
 			if name == "pacman" && len(args) == 1 && args[0] == "-Q" {
 				return "", fmt.Errorf("pacman: command not found")
@@ -66,8 +66,7 @@ func TestInstalledKernelVersionsPacmanErrors(t *testing.T) {
 			return "", fmt.Errorf("unexpected command: %s %v", name, args)
 		},
 	}
-	shell.SetMockRunner(mock)
-	defer shell.ClearMockRunner()
+	setRunner(t, mock)
 
 	_, err := InstalledKernelVersions()
 	require.Error(t, err)

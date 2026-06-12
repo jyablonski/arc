@@ -26,6 +26,9 @@ var _ ShellRunner = &ShellRunnerMock{}
 //			RunInteractiveFunc: func(name string, args ...string) error {
 //				panic("mock out the RunInteractive method")
 //			},
+//			RunSudoFunc: func(name string, args ...string) (string, error) {
+//				panic("mock out the RunSudo method")
+//			},
 //		}
 //
 //		// use mockedShellRunner in code that requires ShellRunner
@@ -41,6 +44,9 @@ type ShellRunnerMock struct {
 
 	// RunInteractiveFunc mocks the RunInteractive method.
 	RunInteractiveFunc func(name string, args ...string) error
+
+	// RunSudoFunc mocks the RunSudo method.
+	RunSudoFunc func(name string, args ...string) (string, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -63,10 +69,18 @@ type ShellRunnerMock struct {
 			// Args is the args argument value.
 			Args []string
 		}
+		// RunSudo holds details about calls to the RunSudo method.
+		RunSudo []struct {
+			// Name is the name argument value.
+			Name string
+			// Args is the args argument value.
+			Args []string
+		}
 	}
 	lockCommandExists  sync.RWMutex
 	lockRun            sync.RWMutex
 	lockRunInteractive sync.RWMutex
+	lockRunSudo        sync.RWMutex
 }
 
 // CommandExists calls CommandExistsFunc.
@@ -170,5 +184,41 @@ func (mock *ShellRunnerMock) RunInteractiveCalls() []struct {
 	mock.lockRunInteractive.RLock()
 	calls = mock.calls.RunInteractive
 	mock.lockRunInteractive.RUnlock()
+	return calls
+}
+
+// RunSudo calls RunSudoFunc.
+func (mock *ShellRunnerMock) RunSudo(name string, args ...string) (string, error) {
+	if mock.RunSudoFunc == nil {
+		panic("ShellRunnerMock.RunSudoFunc: method is nil but ShellRunner.RunSudo was just called")
+	}
+	callInfo := struct {
+		Name string
+		Args []string
+	}{
+		Name: name,
+		Args: args,
+	}
+	mock.lockRunSudo.Lock()
+	mock.calls.RunSudo = append(mock.calls.RunSudo, callInfo)
+	mock.lockRunSudo.Unlock()
+	return mock.RunSudoFunc(name, args...)
+}
+
+// RunSudoCalls gets all the calls that were made to RunSudo.
+// Check the length with:
+//
+//	len(mockedShellRunner.RunSudoCalls())
+func (mock *ShellRunnerMock) RunSudoCalls() []struct {
+	Name string
+	Args []string
+} {
+	var calls []struct {
+		Name string
+		Args []string
+	}
+	mock.lockRunSudo.RLock()
+	calls = mock.calls.RunSudo
+	mock.lockRunSudo.RUnlock()
 	return calls
 }

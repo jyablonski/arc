@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
+	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 )
@@ -164,12 +165,11 @@ func TestRun(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc:           tt.mockRun,
 				CommandExistsFunc: tt.mockCmdExst,
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			err := Run()
 

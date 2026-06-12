@@ -7,11 +7,11 @@ import (
 
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/platform"
-	"github.com/jyablonski/arc/internal/shell"
 )
 
 var ErrUnsupportedPlatform = errors.New("hardware info is not supported on this platform")
 
+//go:generate go tool moq -rm -out reporter_moq.go . Reporter
 type Reporter interface {
 	Show(components []string) error
 }
@@ -34,21 +34,21 @@ func (linuxReporter) Show(components []string) error {
 		switch comp {
 		case "mobo":
 			output.Header("motherboard is")
-			result, err := shell.RunSudo("dmidecode", "-t", "2")
+			result, err := run.RunSudo("dmidecode", "-t", "2")
 			if err != nil {
 				return fmt.Errorf("failed to get motherboard info: %w", err)
 			}
 			fmt.Println(result)
 		case "cpu":
 			output.Header("cpu is")
-			result, err := shell.RunSudo("dmidecode", "-t", "4")
+			result, err := run.RunSudo("dmidecode", "-t", "4")
 			if err != nil {
 				return fmt.Errorf("failed to get CPU info: %w", err)
 			}
 			fmt.Println(result)
 		case "gpu":
 			output.Header("gpu is")
-			pciOutput, err := shell.Run("lspci")
+			pciOutput, err := run.Run("lspci")
 			if err != nil {
 				return fmt.Errorf("failed to get GPU PCI info: %w", err)
 			}
@@ -59,7 +59,7 @@ func (linuxReporter) Show(components []string) error {
 					found = true
 					parts := strings.Fields(line)
 					if len(parts) > 0 {
-						gpuInfo, err := shell.Run("lspci", "-v", "-s", parts[0])
+						gpuInfo, err := run.Run("lspci", "-v", "-s", parts[0])
 						if err == nil {
 							fmt.Println(gpuInfo)
 						}
@@ -71,14 +71,14 @@ func (linuxReporter) Show(components []string) error {
 			}
 		case "gpu-driver":
 			output.Header("gpu driver is")
-			result, err := shell.Run("nvidia-smi")
+			result, err := run.Run("nvidia-smi")
 			if err != nil {
 				return fmt.Errorf("nvidia-smi failed: %w", err)
 			}
 			fmt.Println(result)
 		case "ram":
 			output.Header("ram is")
-			result, err := shell.RunSudo("lshw", "-C", "memory")
+			result, err := run.RunSudo("lshw", "-C", "memory")
 			if err != nil {
 				return fmt.Errorf("failed to get RAM info: %w", err)
 			}
@@ -97,21 +97,21 @@ func (darwinReporter) Show(components []string) error {
 		switch comp {
 		case "mobo":
 			output.Header("hardware is")
-			result, err := shell.Run("system_profiler", "SPHardwareDataType")
+			result, err := run.Run("system_profiler", "SPHardwareDataType")
 			if err != nil {
 				return fmt.Errorf("failed to get hardware info: %w", err)
 			}
 			fmt.Println(result)
 		case "cpu":
 			output.Header("cpu is")
-			result, err := shell.Run("sysctl", "-n", "machdep.cpu.brand_string")
+			result, err := run.Run("sysctl", "-n", "machdep.cpu.brand_string")
 			if err != nil {
 				return fmt.Errorf("failed to get CPU info: %w", err)
 			}
 			fmt.Println(result)
 		case "gpu":
 			output.Header("gpu is")
-			result, err := shell.Run("system_profiler", "SPDisplaysDataType")
+			result, err := run.Run("system_profiler", "SPDisplaysDataType")
 			if err != nil {
 				return fmt.Errorf("failed to get GPU info: %w", err)
 			}
@@ -120,7 +120,7 @@ func (darwinReporter) Show(components []string) error {
 			return fmt.Errorf("gpu-driver is only supported on Linux")
 		case "ram":
 			output.Header("ram is")
-			result, err := shell.Run("system_profiler", "SPMemoryDataType")
+			result, err := run.Run("system_profiler", "SPMemoryDataType")
 			if err != nil {
 				return fmt.Errorf("failed to get RAM info: %w", err)
 			}

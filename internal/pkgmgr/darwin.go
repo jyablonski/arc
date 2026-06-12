@@ -26,23 +26,23 @@ type brewPackageStats struct {
 }
 
 func (darwinManager) UpdateSystem(opts UpdateOptions) error {
-	if !shell.CommandExists("brew") {
+	if !run.CommandExists("brew") {
 		return shell.NewErrToolNotAvailable("brew")
 	}
 
 	output.Info("Updating Homebrew...")
-	if err := shell.RunInteractive("brew", "update"); err != nil {
+	if err := run.RunInteractive("brew", "update"); err != nil {
 		return fmt.Errorf("brew update failed: %w", err)
 	}
 
 	output.Info("Upgrading Homebrew packages...")
-	if err := shell.RunInteractive("brew", "upgrade"); err != nil {
+	if err := run.RunInteractive("brew", "upgrade"); err != nil {
 		return fmt.Errorf("brew upgrade failed: %w", err)
 	}
 
 	if !opts.SkipCache {
 		output.Info("Cleaning Homebrew cache...")
-		if err := shell.RunInteractive("brew", "cleanup"); err != nil {
+		if err := run.RunInteractive("brew", "cleanup"); err != nil {
 			return fmt.Errorf("brew cleanup failed: %w", err)
 		}
 	}
@@ -58,7 +58,7 @@ func (darwinManager) Clean(opts CleanOptions) error {
 
 	if !opts.OrphansOnly {
 		output.Header("cleaning Homebrew cache")
-		if err := shell.RunInteractive("brew", "cleanup"); err != nil {
+		if err := run.RunInteractive("brew", "cleanup"); err != nil {
 			return fmt.Errorf("failed to clean Homebrew cache: %w", err)
 		}
 		output.Success("Homebrew cache cleaned")
@@ -66,7 +66,7 @@ func (darwinManager) Clean(opts CleanOptions) error {
 
 	if !opts.CacheOnly {
 		output.Header("removing unused Homebrew dependencies")
-		if err := shell.RunInteractive("brew", "autoremove"); err != nil {
+		if err := run.RunInteractive("brew", "autoremove"); err != nil {
 			return fmt.Errorf("failed to autoremove Homebrew dependencies: %w", err)
 		}
 		output.Success("Homebrew autoremove complete")

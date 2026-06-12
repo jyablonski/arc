@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,7 +40,7 @@ func TestInfoCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				CommandExistsFunc: func(name string) bool {
 					return tt.commandExists
 				},
@@ -49,8 +50,7 @@ func TestInfoCmd(t *testing.T) {
 					return tt.runInteractiveErr
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			err := infoCmd.RunE(infoCmd, []string{})
 

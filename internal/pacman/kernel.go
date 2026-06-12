@@ -1,10 +1,6 @@
 package pacman
 
-import (
-	"strings"
-
-	"github.com/jyablonski/arc/internal/shell"
-)
+import "strings"
 
 var kernelLinePrefixes = []string{
 	"linux ", "linux-lts ", "linux-zen ", "linux-hardened ",
@@ -12,7 +8,7 @@ var kernelLinePrefixes = []string{
 }
 
 func InstalledKernelVersions() (map[string]string, error) {
-	out, err := shell.Run("pacman", "-Q")
+	out, err := run.Run("pacman", "-Q")
 	if err != nil {
 		return nil, err
 	}

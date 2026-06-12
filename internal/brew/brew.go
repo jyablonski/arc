@@ -17,14 +17,14 @@ type NamedPackage struct {
 }
 
 func CheckAvailable() error {
-	if !shell.CommandExists("brew") {
+	if !run.CommandExists("brew") {
 		return shell.NewErrToolNotAvailable("brew")
 	}
 	return nil
 }
 
 func ListFormulae() ([]string, error) {
-	out, err := shell.Run("brew", "list", "--formula")
+	out, err := run.Run("brew", "list", "--formula")
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func ListFormulae() ([]string, error) {
 }
 
 func ListCasks() ([]string, error) {
-	out, err := shell.Run("brew", "list", "--cask")
+	out, err := run.Run("brew", "list", "--cask")
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func ListCasks() ([]string, error) {
 }
 
 func Leaves() ([]string, error) {
-	out, err := shell.Run("brew", "leaves")
+	out, err := run.Run("brew", "leaves")
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +48,11 @@ func Leaves() ([]string, error) {
 }
 
 func CacheSize() (string, error) {
-	cacheDir, err := shell.Run("brew", "--cache")
+	cacheDir, err := run.Run("brew", "--cache")
 	if err != nil {
 		return "", err
 	}
-	out, err := shell.Run("du", "-sh", strings.TrimSpace(cacheDir))
+	out, err := run.Run("du", "-sh", strings.TrimSpace(cacheDir))
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +64,7 @@ func CacheSize() (string, error) {
 }
 
 func InstalledInfo() (PackageInfo, error) {
-	out, err := shell.Run("brew", "info", "--json=v2", "--installed")
+	out, err := run.Run("brew", "info", "--json=v2", "--installed")
 	if err != nil {
 		return PackageInfo{}, err
 	}

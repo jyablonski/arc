@@ -9,10 +9,6 @@ import (
 )
 
 func Run(name string, args ...string) (string, error) {
-	if mockRunner != nil && mockRunner.RunFunc != nil {
-		return mockRunner.RunFunc(name, args...)
-	}
-
 	cmd := exec.Command(name, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -32,10 +28,6 @@ func RunSudo(name string, args ...string) (string, error) {
 }
 
 func RunInteractive(name string, args ...string) error {
-	if mockRunner != nil && mockRunner.RunInteractiveFunc != nil {
-		return mockRunner.RunInteractiveFunc(name, args...)
-	}
-
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -44,10 +36,6 @@ func RunInteractive(name string, args ...string) error {
 }
 
 func CommandExists(name string) bool {
-	if mockRunner != nil && mockRunner.CommandExistsFunc != nil {
-		return mockRunner.CommandExistsFunc(name)
-	}
-
 	_, err := exec.LookPath(name)
 	return err == nil
 }

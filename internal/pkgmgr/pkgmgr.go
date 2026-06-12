@@ -29,6 +29,7 @@ type PackageOptions struct {
 	JSON bool
 }
 
+//go:generate go tool moq -rm -out manager_moq.go . Manager
 type Manager interface {
 	UpdateSystem(opts UpdateOptions) error
 	Clean(opts CleanOptions) error
@@ -39,7 +40,7 @@ type Manager interface {
 func New(os platform.OS) Manager {
 	switch os {
 	case platform.Linux:
-		return linuxManager{}
+		return linuxManager{pac: realPacman{}}
 	case platform.Darwin:
 		return darwinManager{}
 	default:

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
+	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/jyablonski/arc/internal/platform"
-	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -64,13 +64,12 @@ func TestValidateCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				CommandExistsFunc: func(name string) bool {
 					return tt.availableTools[name]
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			err := validateCmd.RunE(validateCmd, []string{})
 
@@ -90,12 +89,11 @@ func TestValidateCmd_darwinTools(t *testing.T) {
 		"brew": true, "git": true, "gh": true, "fastfetch": true,
 		"uv": true, "system_profiler": true, "pmset": true, "sysctl": true,
 	}
-	shell.SetMockRunner(&shell.MockRunner{
+	setRunner(t, &boundary.ShellRunnerMock{
 		CommandExistsFunc: func(name string) bool {
 			return availableTools[name]
 		},
 	})
-	defer shell.ClearMockRunner()
 
 	assert.NoError(t, validateCmd.RunE(validateCmd, []string{}))
 }
