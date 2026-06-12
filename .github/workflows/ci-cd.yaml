@@ -140,7 +140,7 @@ jobs:
       - name: Verify imports (goimports)
         run: |
           set -euo pipefail
-          unformatted="$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 goimports -l)"
+          unformatted="$(goimports -l .)"
           if [ -n "$unformatted" ]; then
             echo "The following files are not formatted with goimports:"
             echo "$unformatted"
