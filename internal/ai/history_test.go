@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -85,9 +86,9 @@ func TestSortUsageGroups_explicitCostStaysFlat(t *testing.T) {
 
 func TestRunHistoryProviders_pricesAndJSON(t *testing.T) {
 	ts := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	p := fakeHistoryProvider{
-		nameFunc: func() string { return "codex" },
-		localUsageFunc: func(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
+	p := &HistoryProviderMock{
+		NameFunc: func() string { return "codex" },
+		LocalUsageFunc: func(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
 			return []TokenRecord{{
 				Provider:  "codex",
 				Model:     "gpt-5-codex",
@@ -100,6 +101,7 @@ func TestRunHistoryProviders_pricesAndJSON(t *testing.T) {
 	report := RunHistoryProviders(context.Background(), []HistoryProvider{p}, nil, HistoryOptions{}, NewStaticPricer(), "provider,model")
 	require.Len(t, report.Groups, 1)
 	require.InDelta(t, 1.25, report.Total.CostUSD, 1e-9)
+	require.Len(t, p.LocalUsageCalls(), 1)
 
 	var buf bytes.Buffer
 	require.NoError(t, EncodeHistoryJSON(&buf, report))
@@ -109,9 +111,9 @@ func TestRunHistoryProviders_pricesAndJSON(t *testing.T) {
 }
 
 func TestRunHistoryProviders_emptyRecordsEncodeAsArray(t *testing.T) {
-	p := fakeHistoryProvider{
-		nameFunc: func() string { return "codex" },
-		localUsageFunc: func(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
+	p := &HistoryProviderMock{
+		NameFunc: func() string { return "codex" },
+		LocalUsageFunc: func(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
 			return nil, nil
 		},
 	}
@@ -124,15 +126,54 @@ func TestRunHistoryProviders_emptyRecordsEncodeAsArray(t *testing.T) {
 	require.Contains(t, buf.String(), `"records": []`)
 }
 
-type fakeHistoryProvider struct {
-	nameFunc       func() string
-	localUsageFunc func(context.Context, HistoryOptions) ([]TokenRecord, error)
-}
+// TestRunHistoryProviders_partialFailure exercises the mixed success/error path:
+// one provider returns records, another errors. The successful provider's data
+// must still be priced and grouped, the failing one must carry an error + hint,
+// and ExitErrorIfAllHistoryProvidersFailed must NOT trip since one succeeded.
+func TestRunHistoryProviders_partialFailure(t *testing.T) {
+	ts := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	ok := &HistoryProviderMock{
+		NameFunc: func() string { return "codex" },
+		LocalUsageFunc: func(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
+			return []TokenRecord{{
+				Provider:  "codex",
+				Model:     "gpt-5-codex",
+				SessionID: "s1",
+				Timestamp: ts,
+				Tokens:    TokenBreakdown{Input: 1_000_000},
+			}}, nil
+		},
+	}
+	bad := &HistoryProviderMock{
+		NameFunc: func() string { return "claude" },
+		LocalUsageFunc: func(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
+			return nil, errors.New("read ~/.claude: permission denied")
+		},
+	}
 
-func (f fakeHistoryProvider) Name() string {
-	return f.nameFunc()
-}
+	report := RunHistoryProviders(context.Background(), []HistoryProvider{ok, bad}, nil, HistoryOptions{}, NewStaticPricer(), "provider,model")
 
-func (f fakeHistoryProvider) LocalUsage(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error) {
-	return f.localUsageFunc(ctx, opts)
+	// Both providers were consulted exactly once.
+	require.Len(t, ok.LocalUsageCalls(), 1)
+	require.Len(t, bad.LocalUsageCalls(), 1)
+
+	// Results carry per-provider status; order matches input order.
+	require.Len(t, report.Providers, 2)
+	byName := map[string]HistoryProviderResult{}
+	for _, r := range report.Providers {
+		byName[r.Name] = r
+	}
+	require.True(t, byName["codex"].OK)
+	require.False(t, byName["claude"].OK)
+	require.Contains(t, byName["claude"].Error, "permission denied")
+	require.NotEmpty(t, byName["claude"].Hint, "failing provider should get a remediation hint")
+	require.Empty(t, byName["codex"].Hint, "successful provider should not get a hint")
+
+	// The successful provider's records are still priced and grouped.
+	require.Len(t, report.Groups, 1)
+	require.Equal(t, "codex", report.Groups[0].Provider)
+	require.InDelta(t, 1.25, report.Total.CostUSD, 1e-9)
+
+	// One success means the all-failed guard does not trip.
+	require.NoError(t, ExitErrorIfAllHistoryProvidersFailed(report))
 }

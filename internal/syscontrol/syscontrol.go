@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/jyablonski/arc/internal/platform"
-	"github.com/jyablonski/arc/internal/shell"
 )
 
 var ErrUnsupportedPlatform = errors.New("system control is not supported on this platform")
 
+//go:generate go tool moq -rm -out controller_moq.go . Controller
 type Controller interface {
 	Sleep() error
 }
@@ -28,7 +28,7 @@ func New(os platform.OS) Controller {
 type linuxController struct{}
 
 func (linuxController) Sleep() error {
-	if _, err := shell.RunSudo("systemctl", "suspend"); err != nil {
+	if _, err := run.RunSudo("systemctl", "suspend"); err != nil {
 		return fmt.Errorf("failed to suspend: %w", err)
 	}
 	return nil
@@ -37,7 +37,7 @@ func (linuxController) Sleep() error {
 type darwinController struct{}
 
 func (darwinController) Sleep() error {
-	if _, err := shell.Run("pmset", "sleepnow"); err != nil {
+	if _, err := run.Run("pmset", "sleepnow"); err != nil {
 		return fmt.Errorf("failed to suspend: %w", err)
 	}
 	return nil

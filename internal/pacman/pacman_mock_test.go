@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jyablonski/arc/internal/shell"
+	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +50,7 @@ func TestGetPackageCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Q" {
 						return tt.mockOutput, tt.mockError
@@ -58,8 +58,7 @@ func TestGetPackageCount(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			count, err := GetPackageCount()
 
@@ -107,7 +106,7 @@ func TestGetExplicitlyInstalledCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qe" {
 						return tt.mockOutput, tt.mockError
@@ -115,8 +114,7 @@ func TestGetExplicitlyInstalledCount(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			count, err := GetExplicitlyInstalledCount()
 
@@ -164,7 +162,7 @@ func TestGetForeignPackageCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qm" {
 						return tt.mockOutput, tt.mockError
@@ -172,8 +170,7 @@ func TestGetForeignPackageCount(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			count, err := GetForeignPackageCount()
 
@@ -221,7 +218,7 @@ func TestGetExplicitlyInstalled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qe" {
 						return tt.mockOutput, tt.mockError
@@ -229,8 +226,7 @@ func TestGetExplicitlyInstalled(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			pkgs, err := GetExplicitlyInstalled()
 
@@ -278,7 +274,7 @@ func TestGetForeignPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qm" {
 						return tt.mockOutput, tt.mockError
@@ -286,8 +282,7 @@ func TestGetForeignPackages(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			pkgs, err := GetForeignPackages()
 
@@ -361,7 +356,7 @@ Installed Size  : 1.0 GiB
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qi" {
 						return tt.mockOutput, tt.mockError
@@ -369,8 +364,7 @@ Installed Size  : 1.0 GiB
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			size, err := GetTotalInstalledSize()
 
@@ -425,7 +419,7 @@ func TestGetOrphanedPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qdt" {
 						return tt.mockOutput, tt.mockError
@@ -433,8 +427,7 @@ func TestGetOrphanedPackages(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			pkgs, err := GetOrphanedPackages()
 
@@ -486,7 +479,7 @@ func TestSearchPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 2 && args[0] == "-Ss" && args[1] == tt.query {
 						return tt.mockOutput, tt.mockError
@@ -494,8 +487,7 @@ func TestSearchPackages(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			pkgs, err := SearchPackages(tt.query)
 
@@ -550,7 +542,7 @@ func TestGetCacheSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "du" && len(args) == 2 && args[0] == "-sh" && args[1] == "/var/cache/pacman/pkg" {
 						return tt.mockOutput, tt.mockError
@@ -558,8 +550,7 @@ func TestGetCacheSize(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			size, err := GetCacheSize()
 
@@ -630,7 +621,7 @@ func TestGetRecentlyInstalledCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "grep" && len(args) >= 3 && args[0] == "-E" && args[1] == `\[ALPM\] installed` {
 						return tt.mockOutput, tt.mockError
@@ -638,8 +629,7 @@ func TestGetRecentlyInstalledCount(t *testing.T) {
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			count, err := GetRecentlyInstalledCount(tt.days)
 
@@ -701,7 +691,7 @@ Installed Size  : 512.00 MiB`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &shell.MockRunner{
+			mock := &boundary.ShellRunnerMock{
 				RunFunc: func(name string, args ...string) (string, error) {
 					if name == "pacman" && len(args) == 1 && args[0] == "-Qi" {
 						return tt.mockOutput, tt.mockError
@@ -709,8 +699,7 @@ Installed Size  : 512.00 MiB`,
 					return "", fmt.Errorf("unexpected command: %s %v", name, args)
 				},
 			}
-			shell.SetMockRunner(mock)
-			defer shell.ClearMockRunner()
+			setRunner(t, mock)
 
 			pkgs, err := GetLargestPackages(tt.topN)
 

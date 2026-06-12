@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/jyablonski/arc/internal/shell"
 )
 
 var (
@@ -23,7 +21,7 @@ var (
 
 // GetCurrentIdentity returns the current AWS identity
 func GetCurrentIdentity() (map[string]interface{}, error) {
-	output, err := shell.Run("aws", "sts", "get-caller-identity")
+	output, err := run.Run("aws", "sts", "get-caller-identity")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current identity: %w", err)
 	}
@@ -47,7 +45,7 @@ func GetUsername(arn string) (string, error) {
 
 // ListAccessKeys lists all access keys for a user
 func ListAccessKeys(username string) ([]string, error) {
-	output, err := shell.Run("aws", "iam", "list-access-keys", "--user-name", username)
+	output, err := run.Run("aws", "iam", "list-access-keys", "--user-name", username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list access keys: %w", err)
 	}
@@ -74,7 +72,7 @@ func ListAccessKeys(username string) ([]string, error) {
 
 // CreateAccessKey creates a new access key for a user
 func CreateAccessKey(username string) (string, string, error) {
-	output, err := shell.Run("aws", "iam", "create-access-key", "--user-name", username)
+	output, err := run.Run("aws", "iam", "create-access-key", "--user-name", username)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create new access key: %w", err)
 	}
@@ -93,7 +91,7 @@ func CreateAccessKey(username string) (string, string, error) {
 
 // DeleteAccessKey deletes an access key
 func DeleteAccessKey(username, keyID string) error {
-	_, err := shell.Run("aws", "iam", "delete-access-key", "--user-name", username, "--access-key-id", keyID)
+	_, err := run.Run("aws", "iam", "delete-access-key", "--user-name", username, "--access-key-id", keyID)
 	return err
 }
 

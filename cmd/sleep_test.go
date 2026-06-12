@@ -1,43 +1,26 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/jyablonski/arc/internal/platform"
-	"github.com/jyablonski/arc/internal/shell"
+	"github.com/jyablonski/arc/internal/syscontrol"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSleepCmd_runsSuspend(t *testing.T) {
-	defer setAppForTest(newApp(platform.Linux))()
-
-	isolateCommandTreeExtras(t)
-	shell.SetMockRunner(&shell.MockRunner{
-		RunFunc: func(name string, args ...string) (string, error) {
-			if name == "sudo" && len(args) >= 2 && args[0] == "systemctl" && args[1] == "suspend" {
-				return "", nil
-			}
-			return "", fmt.Errorf("unexpected %s %v", name, args)
-		},
-	})
-	t.Cleanup(shell.ClearMockRunner)
-	defer func() { rootCmd.SetArgs(nil) }()
-
-	rootCmd.SetArgs([]string{"sleep"})
-	require.NoError(t, rootCmd.Execute())
-}
-
-func TestSleepCmd_darwinUsesPmset(t *testing.T) {
-	defer setAppForTest(newApp(platform.Darwin))()
-	shell.SetMockRunner(&shell.MockRunner{
-		RunFunc: func(name string, args ...string) (string, error) {
-			require.Equal(t, "pmset", name)
-			require.Equal(t, []string{"sleepnow"}, args)
-			return "", nil
-		},
-	})
-	t.Cleanup(shell.ClearMockRunner)
+func TestSleepCmd_callsControllerSleep(t *testing.T) {
+	ctrl := &syscontrol.ControllerMock{SleepFunc: func() error { return nil }}
+	defer setAppForTest(&App{Platform: platform.Linux, System: ctrl})()
 
 	require.NoError(t, sleepCmd.RunE(sleepCmd, []string{}))
+	require.Len(t, ctrl.SleepCalls(), 1)
+}
+
+func TestSleepCmd_surfacesError(t *testing.T) {
+	wantErr := errors.New("suspend failed")
+	ctrl := &syscontrol.ControllerMock{SleepFunc: func() error { return wantErr }}
+	defer setAppForTest(&App{Platform: platform.Linux, System: ctrl})()
+
+	require.ErrorIs(t, sleepCmd.RunE(sleepCmd, []string{}), wantErr)
 }

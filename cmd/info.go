@@ -10,11 +10,11 @@ var infoCmd = &cobra.Command{
 	Short: "Show system information",
 	Long:  `Run fastfetch to display system information.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !shell.CommandExists("fastfetch") {
+		if !run.CommandExists("fastfetch") {
 			return shell.NewErrToolNotAvailable("fastfetch")
 		}
 
-		return shell.RunInteractive("fastfetch")
+		return run.RunInteractive("fastfetch")
 	},
 }
 

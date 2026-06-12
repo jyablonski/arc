@@ -6,7 +6,6 @@ import (
 	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/deps"
 	"github.com/jyablonski/arc/internal/output"
-	"github.com/jyablonski/arc/internal/shell"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +24,7 @@ enable additional features.`,
 
 		// Check availability
 		for i := range tools {
-			tools[i].Available = shell.CommandExists(tools[i].Name)
+			tools[i].Available = run.CommandExists(tools[i].Name)
 		}
 
 		// Separate required and optional

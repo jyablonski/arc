@@ -9,6 +9,10 @@ func (shellBridge) Run(name string, args ...string) (string, error) {
 	return shell.Run(name, args...)
 }
 
+func (shellBridge) RunSudo(name string, args ...string) (string, error) {
+	return shell.RunSudo(name, args...)
+}
+
 func (shellBridge) RunInteractive(name string, args ...string) error {
 	return shell.RunInteractive(name, args...)
 }

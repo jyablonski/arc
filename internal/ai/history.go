@@ -70,6 +70,8 @@ func ResolveHomeDir(override string) (string, error) {
 	return os.UserHomeDir()
 }
 
+//go:generate go tool moq -rm -out historyprovider_moq.go . HistoryProvider
+
 type HistoryProvider interface {
 	Name() string
 	LocalUsage(ctx context.Context, opts HistoryOptions) ([]TokenRecord, error)

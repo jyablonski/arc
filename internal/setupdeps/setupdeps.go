@@ -13,6 +13,7 @@ import (
 
 var ErrUnsupportedPlatform = errors.New("setup is not supported on this platform")
 
+//go:generate go tool moq -rm -out installer_moq.go . Installer
 type Installer interface {
 	Install() error
 }
@@ -31,7 +32,7 @@ func New(os platform.OS) Installer {
 type linuxInstaller struct{}
 
 func (linuxInstaller) Install() error {
-	if !shell.CommandExists("pacman") {
+	if !run.CommandExists("pacman") {
 		return shell.NewErrToolNotAvailable("pacman")
 	}
 
@@ -49,19 +50,19 @@ func (linuxInstaller) Install() error {
 	}
 
 	for _, pkg := range packagesToInstall {
-		if shell.CommandExists(pkg.checkCmd) {
+		if run.CommandExists(pkg.checkCmd) {
 			output.Info(fmt.Sprintf("%s (%s) is already installed", pkg.name, pkg.description))
 			continue
 		}
 		output.Info(fmt.Sprintf("Installing %s (%s)...", pkg.name, pkg.description))
-		if err := shell.RunInteractive(pkg.installCmd[0], pkg.installCmd[1:]...); err != nil {
+		if err := run.RunInteractive(pkg.installCmd[0], pkg.installCmd[1:]...); err != nil {
 			output.Warning(fmt.Sprintf("Failed to install %s: %v", pkg.name, err))
 		} else {
 			output.Success(fmt.Sprintf("Installed %s", pkg.name))
 		}
 	}
 
-	if !shell.CommandExists("uv") {
+	if !run.CommandExists("uv") {
 		output.Info("Installing uv (Python package manager)...")
 		curlCmd := exec.Command("sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh")
 		curlCmd.Stdin = os.Stdin
@@ -72,7 +73,7 @@ func (linuxInstaller) Install() error {
 			output.Info("You may need to add ~/.cargo/bin to your PATH")
 		} else {
 			output.Success("Installed uv")
-			if shell.CommandExists("uv") {
+			if run.CommandExists("uv") {
 				output.Success("uv is available in PATH")
 			} else {
 				output.Warning("uv was installed but is not in PATH")
@@ -91,7 +92,7 @@ func (linuxInstaller) Install() error {
 type darwinInstaller struct{}
 
 func (darwinInstaller) Install() error {
-	if !shell.CommandExists("brew") {
+	if !run.CommandExists("brew") {
 		output.Error("Homebrew is required for macOS setup but is not installed")
 		output.Info("Install Homebrew manually, then rerun 'arc setup':")
 		output.Info(`  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`)
@@ -110,12 +111,12 @@ func (darwinInstaller) Install() error {
 	}
 
 	for _, pkg := range packagesToInstall {
-		if shell.CommandExists(pkg.checkCmd) {
+		if run.CommandExists(pkg.checkCmd) {
 			output.Info(fmt.Sprintf("%s (%s) is already installed", pkg.name, pkg.description))
 			continue
 		}
 		output.Info(fmt.Sprintf("Installing %s (%s)...", pkg.name, pkg.description))
-		if err := shell.RunInteractive("brew", "install", pkg.name); err != nil {
+		if err := run.RunInteractive("brew", "install", pkg.name); err != nil {
 			output.Warning(fmt.Sprintf("Failed to install %s: %v", pkg.name, err))
 		} else {
 			output.Success(fmt.Sprintf("Installed %s", pkg.name))

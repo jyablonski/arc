@@ -1,11 +1,14 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
+	"github.com/jyablonski/arc/internal/boundary"
+	"github.com/jyablonski/arc/internal/pkgmgr"
 	"github.com/jyablonski/arc/internal/platform"
-	"github.com/jyablonski/arc/internal/shell"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,10 +22,9 @@ func TestUpdateSelfCmd_runs(t *testing.T) {
 
 func TestUpdateUvCmd_uvMissing(t *testing.T) {
 	isolateCommandTreeExtras(t)
-	shell.SetMockRunner(&shell.MockRunner{
+	setRunner(t, &boundary.ShellRunnerMock{
 		CommandExistsFunc: func(name string) bool { return name != "uv" },
 	})
-	t.Cleanup(shell.ClearMockRunner)
 	defer func() { rootCmd.SetArgs(nil) }()
 
 	rootCmd.SetArgs([]string{"update", "uv"})
@@ -30,31 +32,36 @@ func TestUpdateUvCmd_uvMissing(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestUpdateSystemCmd_darwinRunsBrew(t *testing.T) {
-	defer setAppForTest(newApp(platform.Darwin))()
-	updateNoCache = false
-	t.Cleanup(func() { updateNoCache = false })
+func TestUpdateSystemCmd_threadsFlagsToManager(t *testing.T) {
+	var got pkgmgr.UpdateOptions
+	mgr := &pkgmgr.ManagerMock{
+		UpdateSystemFunc: func(opts pkgmgr.UpdateOptions) error { got = opts; return nil },
+	}
+	defer setAppForTest(&App{Platform: platform.Linux, PkgMgr: mgr})()
 
-	var calls [][]string
-	shell.SetMockRunner(&shell.MockRunner{
-		CommandExistsFunc: func(name string) bool { return name == "brew" },
-		RunInteractiveFunc: func(name string, args ...string) error {
-			calls = append(calls, append([]string{name}, args...))
-			return nil
-		},
-	})
-	t.Cleanup(shell.ClearMockRunner)
+	updateNoAUR = true
+	updateNoCache = true
+	t.Cleanup(func() { updateNoAUR = false; updateNoCache = false })
 
 	require.NoError(t, updateSystemCmd.RunE(updateSystemCmd, []string{}))
-	require.Equal(t, [][]string{
-		{"brew", "update"},
-		{"brew", "upgrade"},
-		{"brew", "cleanup"},
-	}, calls)
+	require.Len(t, mgr.UpdateSystemCalls(), 1)
+	assert.Equal(t, pkgmgr.UpdateOptions{SkipAUR: true, SkipCache: true}, got)
 }
 
-func TestUpdateSystemCmd_darwinNoAURUnsupported(t *testing.T) {
-	defer setAppForTest(newApp(platform.Darwin))()
+func TestUpdateSystemCmd_surfacesError(t *testing.T) {
+	wantErr := errors.New("update failed")
+	mgr := &pkgmgr.ManagerMock{UpdateSystemFunc: func(opts pkgmgr.UpdateOptions) error { return wantErr }}
+	defer setAppForTest(&App{Platform: platform.Linux, PkgMgr: mgr})()
+
+	require.ErrorIs(t, updateSystemCmd.RunE(updateSystemCmd, []string{}), wantErr)
+}
+
+func TestUpdateSystemCmd_darwinNoAURRejectedBeforeManager(t *testing.T) {
+	mgr := &pkgmgr.ManagerMock{
+		UpdateSystemFunc: func(opts pkgmgr.UpdateOptions) error { return nil },
+	}
+	defer setAppForTest(&App{Platform: platform.Darwin, PkgMgr: mgr})()
+
 	flag := updateSystemCmd.Flags().Lookup("no-aur")
 	oldChanged := flag.Changed
 	oldNoAUR := updateNoAUR
@@ -66,6 +73,6 @@ func TestUpdateSystemCmd_darwinNoAURUnsupported(t *testing.T) {
 	})
 
 	err := updateSystemCmd.RunE(updateSystemCmd, []string{})
-	require.Error(t, err)
-	require.Contains(t, fmt.Sprint(err), "--no-aur is only supported on Linux")
+	require.ErrorIs(t, err, arcerrs.ErrNoAURLinuxOnly)
+	require.Empty(t, mgr.UpdateSystemCalls(), "manager must not be called when the guard rejects")
 }

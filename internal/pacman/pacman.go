@@ -24,7 +24,7 @@ type PackageInfo struct {
 
 // GetPackageCount returns the total number of installed packages
 func GetPackageCount() (int, error) {
-	output, err := shell.Run("pacman", "-Q")
+	output, err := run.Run("pacman", "-Q")
 	if err != nil {
 		return 0, err
 	}
@@ -36,7 +36,7 @@ func GetPackageCount() (int, error) {
 
 // GetExplicitlyInstalledCount returns the count of explicitly installed packages
 func GetExplicitlyInstalledCount() (int, error) {
-	output, err := shell.Run("pacman", "-Qe")
+	output, err := run.Run("pacman", "-Qe")
 	if err != nil {
 		return 0, err
 	}
@@ -48,7 +48,7 @@ func GetExplicitlyInstalledCount() (int, error) {
 
 // GetForeignPackageCount returns the count of foreign/AUR packages
 func GetForeignPackageCount() (int, error) {
-	output, err := shell.Run("pacman", "-Qm")
+	output, err := run.Run("pacman", "-Qm")
 	if err != nil {
 		return 0, err
 	}
@@ -60,7 +60,7 @@ func GetForeignPackageCount() (int, error) {
 
 // GetExplicitlyInstalled returns a list of explicitly installed packages
 func GetExplicitlyInstalled() ([]string, error) {
-	output, err := shell.Run("pacman", "-Qe")
+	output, err := run.Run("pacman", "-Qe")
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func GetExplicitlyInstalled() ([]string, error) {
 
 // GetForeignPackages returns a list of foreign/AUR packages
 func GetForeignPackages() ([]string, error) {
-	output, err := shell.Run("pacman", "-Qm")
+	output, err := run.Run("pacman", "-Qm")
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func GetForeignPackages() ([]string, error) {
 
 // GetTotalInstalledSize returns the total installed size in GiB
 func GetTotalInstalledSize() (float64, error) {
-	output, err := shell.Run("pacman", "-Qi")
+	output, err := run.Run("pacman", "-Qi")
 	if err != nil {
 		return 0, err
 	}
@@ -122,7 +122,7 @@ func GetTotalInstalledSize() (float64, error) {
 
 // GetCacheSize returns the package cache size
 func GetCacheSize() (string, error) {
-	output, err := shell.Run("du", "-sh", "/var/cache/pacman/pkg")
+	output, err := run.Run("du", "-sh", "/var/cache/pacman/pkg")
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +135,7 @@ func GetCacheSize() (string, error) {
 
 // GetOrphanedPackages returns a list of orphaned packages
 func GetOrphanedPackages() ([]string, error) {
-	output, err := shell.Run("pacman", "-Qdt")
+	output, err := run.Run("pacman", "-Qdt")
 	if err != nil {
 		// No orphans is not an error
 		if strings.Contains(err.Error(), "exit status 1") {
@@ -164,7 +164,7 @@ func GetRecentlyInstalledCount(days int) (int, error) {
 	cutoff := time.Now().AddDate(0, 0, -days)
 	cutoffStr := cutoff.Format("2006-01-02")
 
-	output, err := shell.Run("grep", "-E", `\[ALPM\] installed`, "/var/log/pacman.log")
+	output, err := run.Run("grep", "-E", `\[ALPM\] installed`, "/var/log/pacman.log")
 	if err != nil {
 		return 0, err
 	}
@@ -189,7 +189,7 @@ func GetRecentlyInstalledCount(days int) (int, error) {
 
 // GetLargestPackages returns the N largest packages
 func GetLargestPackages(topN int) ([]PackageInfo, error) {
-	output, err := shell.Run("pacman", "-Qi")
+	output, err := run.Run("pacman", "-Qi")
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func GetLargestPackages(topN int) ([]PackageInfo, error) {
 
 // SearchPackages searches for packages
 func SearchPackages(query string) ([]string, error) {
-	output, err := shell.Run("pacman", "-Ss", query)
+	output, err := run.Run("pacman", "-Ss", query)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +265,7 @@ func SearchPackages(query string) ([]string, error) {
 
 // CheckPacmanAvailable checks if pacman is available
 func CheckPacmanAvailable() error {
-	if !shell.CommandExists("pacman") {
+	if !run.CommandExists("pacman") {
 		return shell.NewErrToolNotAvailable("pacman")
 	}
 	return nil
@@ -273,5 +273,5 @@ func CheckPacmanAvailable() error {
 
 // CheckYayAvailable checks if yay is available
 func CheckYayAvailable() bool {
-	return shell.CommandExists("yay")
+	return run.CommandExists("yay")
 }

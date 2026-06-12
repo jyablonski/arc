@@ -92,6 +92,13 @@ fmt: ## Format Go code
 mocks: ## Regenerate moq mocks (uses `tool github.com/matryer/moq` from go.mod)
 	@echo "Running go generate for moq stubs..."
 	@go generate ./...
+	@echo "Formatting generated code (moq emits unsorted imports)..."
+	@if command -v goimports >/dev/null 2>&1; then \
+		goimports -w .; \
+	else \
+		echo "goimports not found; install with: go install golang.org/x/tools/cmd/goimports@latest"; \
+		exit 1; \
+	fi
 
 lint: ## Run linter (requires golangci-lint)
 	@echo "Running linter..."

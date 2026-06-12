@@ -6,12 +6,12 @@ import (
 	"os"
 
 	"github.com/jyablonski/arc/internal/output"
-	"github.com/jyablonski/arc/internal/pacman"
-	"github.com/jyablonski/arc/internal/shell"
 	"github.com/jyablonski/arc/internal/sysupdate"
 )
 
-type linuxManager struct{}
+type linuxManager struct {
+	pac pacmanOps
+}
 
 type packageStats struct {
 	TotalPackages       int                      `json:"total_packages"`
@@ -31,14 +31,14 @@ func (linuxManager) UpdateSystem(opts UpdateOptions) error {
 	})
 }
 
-func (linuxManager) Clean(opts CleanOptions) error {
-	if err := pacman.CheckPacmanAvailable(); err != nil {
+func (m linuxManager) Clean(opts CleanOptions) error {
+	if err := m.pac.CheckPacmanAvailable(); err != nil {
 		return err
 	}
 
 	if !opts.OrphansOnly {
 		output.Header("cleaning package cache")
-		if _, err := shell.RunSudo("pacman", "-Sc", "--noconfirm"); err != nil {
+		if _, err := run.RunSudo("pacman", "-Sc", "--noconfirm"); err != nil {
 			return fmt.Errorf("failed to clean cache: %w", err)
 		}
 		output.Success("Package cache cleaned")
@@ -46,7 +46,7 @@ func (linuxManager) Clean(opts CleanOptions) error {
 
 	if !opts.CacheOnly {
 		output.Header("removing orphaned packages")
-		orphans, err := pacman.GetOrphanedPackages()
+		orphans, err := m.pac.GetOrphanedPackages()
 		if err != nil {
 			return fmt.Errorf("failed to get orphaned packages: %w", err)
 		}
@@ -55,7 +55,7 @@ func (linuxManager) Clean(opts CleanOptions) error {
 			output.Info("No orphans to remove")
 		} else {
 			args := append([]string{"pacman", "-Rns", "--noconfirm"}, orphans...)
-			if _, err := shell.RunSudo(args[0], args[1:]...); err != nil {
+			if _, err := run.RunSudo(args[0], args[1:]...); err != nil {
 				output.Warning(fmt.Sprintf("Failed to remove some orphans: %v", err))
 			} else {
 				output.Success(fmt.Sprintf("Removed %d orphaned packages", len(orphans)))
@@ -66,20 +66,20 @@ func (linuxManager) Clean(opts CleanOptions) error {
 	return nil
 }
 
-func (linuxManager) Installed(opts InstalledOptions) error {
-	if err := pacman.CheckPacmanAvailable(); err != nil {
+func (m linuxManager) Installed(opts InstalledOptions) error {
+	if err := m.pac.CheckPacmanAvailable(); err != nil {
 		return err
 	}
 
 	var packages []string
 	var err error
 	if opts.ForeignOnly {
-		packages, err = pacman.GetForeignPackages()
+		packages, err = m.pac.GetForeignPackages()
 		if err != nil {
 			return fmt.Errorf("failed to get foreign packages: %w", err)
 		}
 	} else {
-		packages, err = pacman.GetExplicitlyInstalled()
+		packages, err = m.pac.GetExplicitlyInstalled()
 		if err != nil {
 			return fmt.Errorf("failed to get installed packages: %w", err)
 		}
@@ -95,69 +95,68 @@ func (linuxManager) Installed(opts InstalledOptions) error {
 	return nil
 }
 
-func (linuxManager) Packages(opts PackageOptions) error {
-	if err := pacman.CheckPacmanAvailable(); err != nil {
+func (m linuxManager) Packages(opts PackageOptions) error {
+	if err := m.pac.CheckPacmanAvailable(); err != nil {
 		return err
 	}
 
 	stats := packageStats{}
 
-	total, err := pacman.GetPackageCount()
+	total, err := m.pac.GetPackageCount()
 	if err != nil {
 		return fmt.Errorf("failed to get package count: %w", err)
 	}
 	stats.TotalPackages = total
 
-	explicit, err := pacman.GetExplicitlyInstalledCount()
+	explicit, err := m.pac.GetExplicitlyInstalledCount()
 	if err != nil {
 		return fmt.Errorf("failed to get explicitly installed count: %w", err)
 	}
 	stats.ExplicitlyInstalled = explicit
 
-	foreign, err := pacman.GetForeignPackageCount()
+	foreign, err := m.pac.GetForeignPackageCount()
 	if err != nil {
 		return fmt.Errorf("failed to get foreign package count: %w", err)
 	}
 	stats.ForeignPackages = foreign
 
-	totalSize, err := pacman.GetTotalInstalledSize()
+	totalSize, err := m.pac.GetTotalInstalledSize()
 	if err != nil {
 		return fmt.Errorf("failed to get total installed size: %w", err)
 	}
 	stats.TotalInstalledSize = totalSize
 
-	cacheSize, err := pacman.GetCacheSize()
+	cacheSize, err := m.pac.GetCacheSize()
 	if err != nil {
 		stats.CacheSize = "N/A"
 	} else {
 		stats.CacheSize = cacheSize
 	}
 
-	orphans, err := pacman.GetOrphanedPackages()
+	orphans, err := m.pac.GetOrphanedPackages()
 	if err != nil {
 		return fmt.Errorf("failed to get orphaned packages: %w", err)
 	}
 	stats.OrphanedPackages = orphans
 
-	recent, err := pacman.GetRecentlyInstalledCount(opts.Days)
+	recent, err := m.pac.GetRecentlyInstalledCount(opts.Days)
 	if err != nil {
 		return fmt.Errorf("failed to get recently installed count: %w", err)
 	}
 	stats.RecentlyInstalled = recent
 
-	largest, err := pacman.GetLargestPackages(opts.Top)
+	largest, err := m.pac.GetLargestPackages(opts.Top)
 	if err != nil {
 		return fmt.Errorf("failed to get largest packages: %w", err)
 	}
-	stats.LargestPackages = make([]map[string]interface{}, len(largest))
-	for i, pkg := range largest {
-		stats.LargestPackages[i] = map[string]interface{}{
-			"name": pkg.Name,
-			"size": fmt.Sprintf("%s %s", pkg.Size, pkg.Unit),
-		}
-	}
-
 	if opts.JSON {
+		stats.LargestPackages = make([]map[string]interface{}, len(largest))
+		for i, pkg := range largest {
+			stats.LargestPackages[i] = map[string]interface{}{
+				"name": pkg.Name,
+				"size": fmt.Sprintf("%s %s", pkg.Size, pkg.Unit),
+			}
+		}
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(stats)

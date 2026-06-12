@@ -62,12 +62,12 @@ var updateUvCmd = &cobra.Command{
 	Short: "Update uv package manager",
 	Long:  `Update uv to the latest version using uv self update.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !shell.CommandExists("uv") {
+		if !run.CommandExists("uv") {
 			return shell.NewErrToolNotAvailable("uv")
 		}
 
 		output.Info("Updating uv...")
-		if err := shell.RunInteractive("uv", "self", "update"); err != nil {
+		if err := run.RunInteractive("uv", "self", "update"); err != nil {
 			return fmt.Errorf("failed to update uv: %w", err)
 		}
 
