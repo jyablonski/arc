@@ -19,7 +19,7 @@ Instead of remembering scattered commands or maintaining shell aliases:
 
 ```bash
 # Before
-sudo pacman -Syu && yay -Syu --aur && sudo paccache -rv
+sudo pacman -Syu && yay -Syu --aur --diffmenu --editmenu && sudo paccache -rv
 pacman -Qi | awk '/^Name/ {name=$3} /^Installed Size/ {print $4, $5, name}' | sort -h | tail -25
 # Check Claude, Codex, and Cursor usage separately
 

@@ -80,7 +80,7 @@ Some output is intentionally platform-specific. For example, `arc packages` repo
 
 On Arch Linux:
 
-- `arc update system` runs the pacman/yay update workflow.
+- `arc update system` runs the pacman/yay update workflow. The yay AUR step is interactive and forces diff and PKGBUILD review prompts before building. Before yay runs, arc triages pending AUR updates against the AUR RPC: it flags maintainer changes (baseline kept at `~/.local/state/arc/aur-provenance.json`), orphaned packages, and high-signal PKGBUILD patterns. Packages in `IgnorePkg` are skipped (arc won't review what yay won't upgrade), and it stays quiet when nothing is pending. It only surfaces findings — you still decide at the diffmenu.
 - `arc clean` uses pacman cache and orphan cleanup.
 - `arc packages` and `arc installed` read pacman package metadata.
 - `arc sleep` uses systemd.
