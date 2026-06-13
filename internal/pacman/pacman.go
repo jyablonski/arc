@@ -2,6 +2,7 @@ package pacman
 
 import (
 	"errors"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/jyablonski/arc/internal/shell"
 )
+
+// pacmanConfPath is the system pacman config; var for test overrides.
+var pacmanConfPath = "/etc/pacman.conf"
 
 // ErrParseCacheSize is returned when the package cache size output cannot be parsed.
 var ErrParseCacheSize = errors.New("could not parse cache size")
@@ -80,6 +84,55 @@ func GetForeignPackages() ([]string, error) {
 		return []string{}, nil
 	}
 	return strings.Split(strings.TrimSpace(output), "\n"), nil
+}
+
+// GetIgnoredPackages returns the IgnorePkg patterns declared in pacman.conf.
+// Values may be space- or comma-separated and may use glob patterns; yay reads
+// the same setting, so excluding them keeps arc's review in step with what yay
+// will actually upgrade. A missing config file yields no patterns (not an error).
+func GetIgnoredPackages() ([]string, error) {
+	b, err := os.ReadFile(pacmanConfPath)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "IgnorePkg" {
+			continue
+		}
+		out = append(out, strings.FieldsFunc(val, func(r rune) bool {
+			return r == ' ' || r == '\t' || r == ','
+		})...)
+	}
+	return out, nil
+}
+
+// GetForeignPackageVersions returns installed foreign/AUR packages as a
+// name->version map, parsed from `pacman -Qm` (each line is "name version").
+func GetForeignPackageVersions() (map[string]string, error) {
+	output, err := run.Run("pacman", "-Qm")
+	if err != nil {
+		return nil, err
+	}
+	versions := map[string]string{}
+	if output == "" {
+		return versions, nil
+	}
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			versions[fields[0]] = fields[1]
+		}
+	}
+	return versions, nil
 }
 
 // GetTotalInstalledSize returns the total installed size in GiB
