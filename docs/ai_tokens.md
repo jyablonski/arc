@@ -4,7 +4,7 @@
 
 This is historical local usage — what your installed tools actually logged on disk — not subscription quota. For live, provider-reported quota windows use [`arc ai usage`](ai_usage.md) instead.
 
-No network: unlike `arc ai usage`, this command makes zero outward calls. It only reads JSONL session files already on disk and prices them locally.
+No network: unlike `arc ai usage`, this command makes zero outward calls. It only reads JSONL session files already on disk and prices them locally. To update the price table itself, run the sibling [`arc ai pricing`](ai_pricing.md) command, which fetches an updated table on demand.
 
 ## Sources
 
@@ -20,12 +20,7 @@ Each record carries a token breakdown of input, output, cache_read, cache_write,
 
 Cost is an API-equivalent estimate: it answers "what would these tokens have cost at pay-as-you-go API rates," not what you were actually billed under a subscription.
 
-- Pricing is a static, built-in table (`internal/ai/pricing.go`), one rate per million tokens for each token type.
-- Model IDs are normalized (provider prefix and date suffix stripped) and matched against the table; unknown models are priced at `0` with source `unpriced`.
-- Reasoning tokens fall back to the output rate when a model has no explicit reasoning rate.
-- The `pricing_source` field labels each group (`static-anthropic-api`, `static-openai-api`, `unpriced`, or `mixed` when a group spans more than one source).
-
-> Pricing is baked into the binary, so estimates only update when `arc` does. Treat the cost column as an approximation.
+Rates come from a layered table — a hand-edited override over a fetched cache over built-in defaults — and the `pricing_source` field labels which layer priced each group. Unknown models are priced at `0` with source `unpriced`. Refresh the table or add a missing model with [`arc ai pricing`](ai_pricing.md); see that page for the full layering rules and the override file format.
 
 ## Command
 

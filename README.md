@@ -96,6 +96,7 @@ arc update self
 | `setup`         | installs tools with pacman         | installs tools with Homebrew   | `arc setup`                    |
 | `ai usage`      | AI coding tool usage               | AI coding tool usage           | `arc ai usage`                 |
 | `ai tokens`     | Local AI token usage and cost      | Local AI token usage and cost  | `arc ai tokens`                |
+| `ai pricing`    | Refresh local model pricing cache  | Refresh local model pricing cache | `arc ai pricing`            |
 | `skills`        | Shared AI/LLM skills               | Shared AI/LLM skills           | `arc skills sync`              |
 | `rules`         | Shared AGENTS.md rules             | Shared AGENTS.md rules         | `arc rules sync`               |
 
@@ -109,6 +110,7 @@ More detailed notes are available in `docs/`:
 
 - [AI usage](docs/ai_usage.md)
 - [AI tokens](docs/ai_tokens.md)
+- [AI pricing](docs/ai_pricing.md)
 - [Shared skills](docs/skills.md)
 - [Shared rules](docs/rules.md)
 

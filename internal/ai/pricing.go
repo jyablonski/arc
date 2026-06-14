@@ -7,12 +7,12 @@ type Pricer interface {
 }
 
 type ModelPrice struct {
-	InputPerMillion      float64
-	OutputPerMillion     float64
-	CacheReadPerMillion  float64
-	CacheWritePerMillion float64
-	ReasoningPerMillion  float64
-	Source               string
+	InputPerMillion      float64 `json:"input_per_million"`
+	OutputPerMillion     float64 `json:"output_per_million"`
+	CacheReadPerMillion  float64 `json:"cache_read_per_million,omitempty"`
+	CacheWritePerMillion float64 `json:"cache_write_per_million,omitempty"`
+	ReasoningPerMillion  float64 `json:"reasoning_per_million,omitempty"`
+	Source               string  `json:"source,omitempty"`
 }
 
 type StaticPricer struct {
@@ -24,29 +24,64 @@ func NewStaticPricer() StaticPricer {
 }
 
 func (p StaticPricer) Cost(model string, tokens TokenBreakdown) (float64, string) {
-	price, ok := p.lookup(model)
+	price, ok := lookupPrice(p.Prices, model)
 	if !ok {
 		return 0, "unpriced"
 	}
+	return computeCost(price, tokens), price.Source
+}
+
+// LayeredPricer prices a model by consulting an ordered list of price maps,
+// highest priority first. It lets a hand-edited override file and a fetched
+// cache shadow the built-in defaults without any network access at price time.
+type LayeredPricer struct {
+	Layers []map[string]ModelPrice
+}
+
+// NewLayeredPricer stacks pricing sources, highest priority first: the
+// user-editable override file, then the fetched cache (`arc ai tokens
+// pricing`), then the built-in defaults. Missing or unreadable files are
+// skipped, so this degrades to the static table when nothing has been fetched.
+func NewLayeredPricer() LayeredPricer {
+	var layers []map[string]ModelPrice
+	if override, ok := ReadPricingOverride(); ok && len(override) > 0 {
+		layers = append(layers, override)
+	}
+	if cached, ok := ReadPricingCache(); ok && len(cached) > 0 {
+		layers = append(layers, cached)
+	}
+	layers = append(layers, defaultModelPrices())
+	return LayeredPricer{Layers: layers}
+}
+
+func (p LayeredPricer) Cost(model string, tokens TokenBreakdown) (float64, string) {
+	for _, prices := range p.Layers {
+		if price, ok := lookupPrice(prices, model); ok {
+			return computeCost(price, tokens), price.Source
+		}
+	}
+	return 0, "unpriced"
+}
+
+func computeCost(price ModelPrice, tokens TokenBreakdown) float64 {
 	outputRate := price.OutputPerMillion
 	reasoningRate := price.ReasoningPerMillion
 	if reasoningRate == 0 {
 		reasoningRate = outputRate
 	}
-	cost := perMillion(tokens.Input, price.InputPerMillion) +
+	return perMillion(tokens.Input, price.InputPerMillion) +
 		perMillion(tokens.Output, outputRate) +
 		perMillion(tokens.CacheRead, price.CacheReadPerMillion) +
 		perMillion(tokens.CacheWrite, price.CacheWritePerMillion) +
 		perMillion(tokens.Reasoning, reasoningRate)
-	return cost, price.Source
 }
 
-func (p StaticPricer) lookup(model string) (ModelPrice, bool) {
+func lookupPrice(prices map[string]ModelPrice, model string) (ModelPrice, bool) {
 	normalized := normalizeModelID(model)
-	if price, ok := p.Prices[normalized]; ok {
+	if price, ok := prices[normalized]; ok {
 		return price, true
 	}
-	for key, price := range p.Prices {
+	for key, price := range prices {
 		if strings.Contains(normalized, key) {
 			return price, true
 		}
@@ -73,8 +108,9 @@ func normalizeModelID(model string) string {
 }
 
 func defaultModelPrices() map[string]ModelPrice {
-	// TODO: Pull provider pricing from an external source so API-equivalent
-	// costs can stay current without requiring an arc release.
+	// These are the lowest-priority fallback layer. `arc ai pricing` fetches a
+	// current table into the cache, and a user override file can shadow both, so
+	// costs stay current without an arc release (see NewLayeredPricer).
 	openai125 := ModelPrice{
 		InputPerMillion:     1.25,
 		CacheReadPerMillion: 0.125,

@@ -36,7 +36,7 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 - `internal/sysupdate` — Linux `arc update system` workflow
 - `internal/gitcleanup` — `arc git cleanup` logic
 - `internal/selfupdate` — `arc update self`
-- `internal/ai` — `arc ai usage` (live provider quota, networked) and `arc ai tokens` (local Claude/Codex session-log token history priced via built-in `internal/ai/pricing.go`, no network). See `docs/ai_tokens.md`.
+- `internal/ai` — `arc ai usage` (live provider quota, networked) and `arc ai tokens` (local Claude/Codex session-log token history, offline). Pricing layers a hand-edited override (`~/.config/arc/ai-pricing.json`) over a fetched cache (`~/.cache/arc/ai-pricing.json`, refreshed by `arc ai pricing`) over built-in defaults (`internal/ai/pricing.go`). See `docs/ai_tokens.md`.
 
 ## Adding commands
 

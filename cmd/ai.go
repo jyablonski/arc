@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jyablonski/arc/internal/ai"
@@ -14,6 +17,7 @@ import (
 	aicursor "github.com/jyablonski/arc/internal/ai/cursor"
 	"github.com/jyablonski/arc/internal/ai/presentation"
 	"github.com/jyablonski/arc/internal/arcerrs"
+	"github.com/jyablonski/arc/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +31,8 @@ var (
 	aiTokensSortBy          string
 	aiTokensSortOrder       string
 	aiTokensShowTotalTokens bool
+	aiPricingSource         string
+	aiPricingDryRun         bool
 )
 
 var aiCmd = &cobra.Command{
@@ -57,6 +63,25 @@ with an API-equivalent cost estimate based on built-in model pricing.
 This is historical local usage, not the same thing as subscription quota usage.
 Use "arc ai usage" for live provider-reported quota windows.`,
 	RunE: runAITokens,
+}
+
+var aiPricingCmd = &cobra.Command{
+	Use:   "pricing",
+	Short: "Refresh the local model pricing cache used by 'arc ai tokens'",
+	Long: `Downloads a current model pricing table and writes it to the local cache at
+~/.cache/arc/ai-pricing.json. This is the only networked command under "arc ai"
+besides "arc ai usage": "arc ai tokens" itself stays offline and reads whatever
+this command last cached.
+
+Pricing is layered, highest priority first:
+  1. ~/.config/arc/ai-pricing.json   hand-edited overrides (you maintain)
+  2. ~/.cache/arc/ai-pricing.json     fetched by this command
+  3. built-in defaults                shipped with arc
+
+The default source is LiteLLM's community pricing table; pass --source to use
+your own JSON in the same format. A brand-new model the source does not list yet
+can be priced immediately by adding it to the override file, which always wins.`,
+	RunE: runAIPricing,
 }
 
 func runAIUsage(cmd *cobra.Command, args []string) error {
@@ -127,7 +152,7 @@ func runAITokens(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	report := ai.RunHistoryProviders(cmd.Context(), localHistoryProviders(), filters, opts, ai.NewStaticPricer(), aiTokensGroupBy)
+	report := ai.RunHistoryProviders(cmd.Context(), localHistoryProviders(), filters, opts, ai.NewLayeredPricer(), aiTokensGroupBy)
 	sortBy, sortOrder := ai.NormalizeHistorySort(report.GroupBy, aiTokensSortBy, aiTokensSortOrder)
 	ai.SortUsageGroups(report.Groups, report.GroupBy, sortBy, sortOrder)
 	report.SortBy = sortBy
@@ -141,6 +166,85 @@ func runAITokens(cmd *cobra.Command, args []string) error {
 	}
 	presentation.PrintHistory(report, presentation.HistoryPrintOptions{ShowTotalTokens: aiTokensShowTotalTokens})
 	return ai.ExitErrorIfAllHistoryProvidersFailed(report)
+}
+
+func runAIPricing(cmd *cobra.Command, args []string) error {
+	_ = args
+	jsonOut, _ := cmd.Flags().GetBool("json")
+
+	source := aiPricingSource
+	if source == "" {
+		source = ai.DefaultPricingSource
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	prices, err := ai.FetchPricing(cmd.Context(), source, client)
+	if err != nil {
+		return err
+	}
+
+	prev, _ := ai.ReadPricingCache()
+	added := newModelKeys(prev, prices)
+	now := time.Now()
+
+	if !aiPricingDryRun {
+		if err := ai.WritePricingCache(now, source, prices); err != nil {
+			return err
+		}
+	}
+
+	if jsonOut {
+		path, _ := ai.PricingCachePath()
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{
+			"source":      source,
+			"fetched_at":  now,
+			"cache_path":  path,
+			"dry_run":     aiPricingDryRun,
+			"model_count": len(prices),
+			"new_models":  added,
+			"prices":      prices,
+		})
+	}
+
+	return printPricingSummary(source, prices, added, now)
+}
+
+func printPricingSummary(source string, prices map[string]ai.ModelPrice, added []string, now time.Time) error {
+	path, _ := ai.PricingCachePath()
+	overridePath, _ := ai.PricingOverridePath()
+
+	if aiPricingDryRun {
+		output.Info(fmt.Sprintf("Dry run: %d models from %s (cache not written)", len(prices), source))
+	} else {
+		output.Success(fmt.Sprintf("Cached %d models from %s", len(prices), source))
+		output.Print(fmt.Sprintf("  written to %s at %s", path, now.Format(time.RFC3339)))
+	}
+	if len(added) > 0 {
+		shown := added
+		if len(shown) > 10 {
+			shown = shown[:10]
+		}
+		output.Print(fmt.Sprintf("  new since last refresh (%d): %s", len(added), strings.Join(shown, ", ")))
+		if len(added) > len(shown) {
+			output.Print(fmt.Sprintf("  …and %d more", len(added)-len(shown)))
+		}
+	}
+	output.Print(fmt.Sprintf("  hand-edit %s to add or override models (always wins)", overridePath))
+	return nil
+}
+
+// newModelKeys returns the price keys present in next but not in prev, sorted.
+func newModelKeys(prev, next map[string]ai.ModelPrice) []string {
+	var added []string
+	for k := range next {
+		if _, ok := prev[k]; !ok {
+			added = append(added, k)
+		}
+	}
+	sort.Strings(added)
+	return added
 }
 
 func parseHistoryOptions(sinceRaw, untilRaw string) (ai.HistoryOptions, error) {
@@ -181,7 +285,7 @@ func printUsageROI(ctx context.Context, filters []string, now time.Time) {
 	if err != nil || !ok || !cfg.HasSubscriptions() {
 		return
 	}
-	report := ai.RunHistoryProviders(ctx, localHistoryProviders(), filters, ai.CurrentMonthOptions(now), ai.NewStaticPricer(), "provider")
+	report := ai.RunHistoryProviders(ctx, localHistoryProviders(), filters, ai.CurrentMonthOptions(now), ai.NewLayeredPricer(), "provider")
 	byProvider := map[string]float64{}
 	for _, group := range report.Groups {
 		byProvider[group.Provider] = group.CostUSD
@@ -240,7 +344,10 @@ func init() {
 	aiTokensCmd.Flags().StringVar(&aiTokensSortBy, "sort-by", "", "Sort by: cluster, cost, tokens, date, group (default cluster desc, grouping rows by provider; date asc for --group-by date)")
 	aiTokensCmd.Flags().StringVar(&aiTokensSortOrder, "sort-order", "", "Sort order: asc, desc")
 	aiTokensCmd.Flags().BoolVar(&aiTokensShowTotalTokens, "show-total-tokens", false, "Show the aggregate token total column; hidden by default because cache reads can dominate raw totals")
+	aiPricingCmd.Flags().StringVar(&aiPricingSource, "source", "", "Pricing table URL in LiteLLM JSON format (default LiteLLM's table)")
+	aiPricingCmd.Flags().BoolVar(&aiPricingDryRun, "dry-run", false, "Fetch and report without writing the cache")
 	aiCmd.AddCommand(aiUsageCmd)
 	aiCmd.AddCommand(aiTokensCmd)
+	aiCmd.AddCommand(aiPricingCmd)
 	rootCmd.AddCommand(aiCmd)
 }
