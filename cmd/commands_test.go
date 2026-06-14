@@ -29,6 +29,7 @@ func isolateCommandTreeExtras(t *testing.T) {
 
 var expectedCommands = []string{
 	"ai",
+	"ai pricing",
 	"ai tokens",
 	"ai usage",
 	"aws",
