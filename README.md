@@ -99,6 +99,7 @@ arc update self
 | `ai pricing`    | Refresh local model pricing cache  | Refresh local model pricing cache | `arc ai pricing`            |
 | `skills`        | Shared AI/LLM skills               | Shared AI/LLM skills           | `arc skills sync`              |
 | `rules`         | Shared AGENTS.md rules             | Shared AGENTS.md rules         | `arc rules sync`               |
+| `stats`         | Local command usage stats          | Local command usage stats      | `arc stats --json`             |
 
 Arch-only flags such as `--aur-only` and `--no-aur` return an unsupported-platform error on macOS when explicitly used.
 

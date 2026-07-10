@@ -31,14 +31,3 @@ func Detect() OS {
 		return Unknown
 	}
 }
-
-func Parse(goos string) OS {
-	switch goos {
-	case Linux.String():
-		return Linux
-	case Darwin.String():
-		return Darwin
-	default:
-		return Unknown
-	}
-}

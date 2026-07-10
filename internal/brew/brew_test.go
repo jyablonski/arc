@@ -21,23 +21,6 @@ func TestListFormulae(t *testing.T) {
 	require.Equal(t, []string{"git", "uv", "fastfetch"}, got)
 }
 
-func TestInstalledInfo(t *testing.T) {
-	setRunner(t, &boundary.ShellRunnerMock{
-		RunFunc: func(name string, args ...string) (string, error) {
-			require.Equal(t, "brew", name)
-			require.Equal(t, []string{"info", "--json=v2", "--installed"}, args)
-			return `{"formulae":[{"name":"git"}],"casks":[{"name":"cursor"}]}`, nil
-		},
-	})
-
-	got, err := InstalledInfo()
-	require.NoError(t, err)
-	require.Len(t, got.Formulae, 1)
-	require.Equal(t, "git", got.Formulae[0].Name)
-	require.Len(t, got.Casks, 1)
-	require.Equal(t, "cursor", got.Casks[0].Name)
-}
-
 func TestCacheSize(t *testing.T) {
 	setRunner(t, &boundary.ShellRunnerMock{
 		RunFunc: func(name string, args ...string) (string, error) {

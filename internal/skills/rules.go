@@ -4,13 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/jyablonski/arc/internal/output"
 )
-
-func currentUnix() int64 { return time.Now().Unix() }
 
 type RulesEntry struct {
 	Provider string `json:"provider"`

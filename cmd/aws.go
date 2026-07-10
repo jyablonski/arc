@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/jyablonski/arc/internal/aws"
-	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/spf13/cobra"
 )
@@ -36,35 +35,7 @@ var awsWhoamiCmd = &cobra.Command{
 	},
 }
 
-var awsRotateKeysCmd = &cobra.Command{
-	Use:   "rotate-keys",
-	Short: "Rotate IAM access keys",
-	Long: `Rotate IAM access keys by creating new keys and deleting old ones.
-Automatically backs up old credentials and updates ~/.aws/credentials.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !run.CommandExists("aws") {
-			return shell.NewErrToolNotAvailable("aws")
-		}
-
-		output.Header("Rotating IAM Access Keys")
-
-		credentialsPath, err := aws.GetCredentialsPath()
-		if err != nil {
-			return err
-		}
-
-		// Determine which profile to use (default or from AWS_PROFILE env).
-		profileName := "default"
-		if envProfile := os.Getenv("AWS_PROFILE"); envProfile != "" {
-			profileName = envProfile
-		}
-
-		return aws.RotateKeys(credentialsPath, profileName, 10)
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(awsCmd)
 	awsCmd.AddCommand(awsWhoamiCmd)
-	awsCmd.AddCommand(awsRotateKeysCmd)
 }

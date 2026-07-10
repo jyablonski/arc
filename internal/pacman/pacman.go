@@ -304,18 +304,6 @@ func GetLargestPackages(topN int) ([]PackageInfo, error) {
 	return result[:topN], nil
 }
 
-// SearchPackages searches for packages
-func SearchPackages(query string) ([]string, error) {
-	output, err := run.Run("pacman", "-Ss", query)
-	if err != nil {
-		return nil, err
-	}
-	if output == "" {
-		return []string{}, nil
-	}
-	return strings.Split(strings.TrimSpace(output), "\n"), nil
-}
-
 // CheckPacmanAvailable checks if pacman is available
 func CheckPacmanAvailable() error {
 	if !run.CommandExists("pacman") {

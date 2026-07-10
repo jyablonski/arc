@@ -11,8 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStaticPricer_Cost(t *testing.T) {
-	cost, source := NewStaticPricer().Cost("gpt-5-codex", TokenBreakdown{
+// defaultPricer prices from the built-in table only, keeping tests hermetic
+// (NewLayeredPricer would also read the user's override and cache files).
+func defaultPricer() LayeredPricer {
+	return LayeredPricer{Layers: []map[string]ModelPrice{defaultModelPrices()}}
+}
+
+func TestDefaultPricer_Cost(t *testing.T) {
+	cost, source := defaultPricer().Cost("gpt-5-codex", TokenBreakdown{
 		Input:     1_000_000,
 		CacheRead: 1_000_000,
 		Output:    1_000_000,
@@ -21,7 +27,7 @@ func TestStaticPricer_Cost(t *testing.T) {
 	require.Equal(t, "static-openai-api", source)
 	require.InDelta(t, 21.375, cost, 1e-9)
 
-	cost, source = NewStaticPricer().Cost("gpt-5.5", TokenBreakdown{Input: 1_000_000})
+	cost, source = defaultPricer().Cost("gpt-5.5", TokenBreakdown{Input: 1_000_000})
 	require.Equal(t, "static-openai-api", source)
 	require.InDelta(t, 5, cost, 1e-9)
 }
@@ -98,7 +104,7 @@ func TestRunHistoryProviders_pricesAndJSON(t *testing.T) {
 			}}, nil
 		},
 	}
-	report := RunHistoryProviders(context.Background(), []HistoryProvider{p}, nil, HistoryOptions{}, NewStaticPricer(), "provider,model")
+	report := RunHistoryProviders(context.Background(), []HistoryProvider{p}, nil, HistoryOptions{}, defaultPricer(), "provider,model")
 	require.Len(t, report.Groups, 1)
 	require.InDelta(t, 1.25, report.Total.CostUSD, 1e-9)
 	require.Len(t, p.LocalUsageCalls(), 1)
@@ -117,7 +123,7 @@ func TestRunHistoryProviders_emptyRecordsEncodeAsArray(t *testing.T) {
 			return nil, nil
 		},
 	}
-	report := RunHistoryProviders(context.Background(), []HistoryProvider{p}, nil, HistoryOptions{}, NewStaticPricer(), "provider,model")
+	report := RunHistoryProviders(context.Background(), []HistoryProvider{p}, nil, HistoryOptions{}, defaultPricer(), "provider,model")
 	require.Empty(t, report.Groups)
 	require.NotNil(t, report.Providers[0].Records)
 
@@ -151,7 +157,7 @@ func TestRunHistoryProviders_partialFailure(t *testing.T) {
 		},
 	}
 
-	report := RunHistoryProviders(context.Background(), []HistoryProvider{ok, bad}, nil, HistoryOptions{}, NewStaticPricer(), "provider,model")
+	report := RunHistoryProviders(context.Background(), []HistoryProvider{ok, bad}, nil, HistoryOptions{}, defaultPricer(), "provider,model")
 
 	// Both providers were consulted exactly once.
 	require.Len(t, ok.LocalUsageCalls(), 1)

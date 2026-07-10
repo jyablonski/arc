@@ -442,66 +442,6 @@ func TestGetOrphanedPackages(t *testing.T) {
 	}
 }
 
-func TestSearchPackages(t *testing.T) {
-	tests := []struct {
-		name          string
-		query         string
-		mockOutput    string
-		mockError     error
-		expectedPkgs  []string
-		expectedError bool
-	}{
-		{
-			name:          "search results",
-			query:         "vim",
-			mockOutput:    "extra/vim 9.0.0000-1\ncommunity/vim-plugins 1.0.0-1",
-			mockError:     nil,
-			expectedPkgs:  []string{"extra/vim 9.0.0000-1", "community/vim-plugins 1.0.0-1"},
-			expectedError: false,
-		},
-		{
-			name:          "empty results",
-			query:         "nonexistent",
-			mockOutput:    "",
-			mockError:     nil,
-			expectedPkgs:  []string{},
-			expectedError: false,
-		},
-		{
-			name:          "pacman error",
-			query:         "vim",
-			mockOutput:    "",
-			mockError:     fmt.Errorf("pacman: command not found"),
-			expectedPkgs:  nil,
-			expectedError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &boundary.ShellRunnerMock{
-				RunFunc: func(name string, args ...string) (string, error) {
-					if name == "pacman" && len(args) == 2 && args[0] == "-Ss" && args[1] == tt.query {
-						return tt.mockOutput, tt.mockError
-					}
-					return "", fmt.Errorf("unexpected command: %s %v", name, args)
-				},
-			}
-			setRunner(t, mock)
-
-			pkgs, err := SearchPackages(tt.query)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.expectedPkgs, pkgs)
-		})
-	}
-}
-
 func TestGetCacheSize(t *testing.T) {
 	tests := []struct {
 		name          string

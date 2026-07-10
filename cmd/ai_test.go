@@ -130,11 +130,20 @@ func TestRunAIUsage_printsROIWhenConfigured(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
+	// The ROI section only counts sessions from the current month, so derive the
+	// fixture timestamp from the live clock; back off an hour to stay behind the
+	// command's own time.Now(), clamping to month start so it never crosses back.
+	now := time.Now().UTC()
+	sessionTime := now.Add(-time.Hour)
+	if sessionTime.Month() != now.Month() {
+		sessionTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	}
+
 	cacheDir, err := ai.CacheDir()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cacheDir, filemode.Dir))
 	report := ai.AggregateReport{
-		FetchedAt: time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC),
+		FetchedAt: sessionTime,
 		Providers: []ai.ProviderResult{
 			{Name: "codex", OK: true, Report: ai.UsageReport{Windows: []ai.UsageWindow{{Label: "5 hour", PercentUsed: 1}}}},
 		},
@@ -157,9 +166,11 @@ func TestRunAIUsage_printsROIWhenConfigured(t *testing.T) {
 
 	sessionDir := filepath.Join(home, ".codex", "sessions")
 	require.NoError(t, os.MkdirAll(sessionDir, filemode.Dir))
+	ts := sessionTime.Format(time.RFC3339)
+	ts2 := sessionTime.Add(time.Second).Format(time.RFC3339)
 	require.NoError(t, os.WriteFile(filepath.Join(sessionDir, "rollout.jsonl"), []byte(
-		`{"type":"turn_context","timestamp":"2026-06-03T12:00:00Z","payload":{"model":"gpt-5-codex"}}`+"\n"+
-			`{"type":"event_msg","timestamp":"2026-06-03T12:00:01Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000}}}}`+"\n",
+		`{"type":"turn_context","timestamp":"`+ts+`","payload":{"model":"gpt-5-codex"}}`+"\n"+
+			`{"type":"event_msg","timestamp":"`+ts2+`","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000}}}}`+"\n",
 	), 0o600))
 
 	defer func() { rootCmd.SetArgs([]string{}) }()

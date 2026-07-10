@@ -15,22 +15,6 @@ type ModelPrice struct {
 	Source               string  `json:"source,omitempty"`
 }
 
-type StaticPricer struct {
-	Prices map[string]ModelPrice
-}
-
-func NewStaticPricer() StaticPricer {
-	return StaticPricer{Prices: defaultModelPrices()}
-}
-
-func (p StaticPricer) Cost(model string, tokens TokenBreakdown) (float64, string) {
-	price, ok := lookupPrice(p.Prices, model)
-	if !ok {
-		return 0, "unpriced"
-	}
-	return computeCost(price, tokens), price.Source
-}
-
 // LayeredPricer prices a model by consulting an ordered list of price maps,
 // highest priority first. It lets a hand-edited override file and a fetched
 // cache shadow the built-in defaults without any network access at price time.
