@@ -1,31 +1,14 @@
 package cmd
 
 import (
-	"os"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/jyablonski/arc/internal/extracmd"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func isolateCommandTreeExtras(t *testing.T) {
-	t.Helper()
-	oldVal, had := os.LookupEnv(extracmd.EnvVar)
-	require.NoError(t, os.Unsetenv(extracmd.EnvVar))
-	extracmd.ApplyVisibility()
-	t.Cleanup(func() {
-		if had {
-			require.NoError(t, os.Setenv(extracmd.EnvVar, oldVal))
-		} else {
-			require.NoError(t, os.Unsetenv(extracmd.EnvVar))
-		}
-		extracmd.ApplyVisibility()
-	})
-}
 
 var expectedCommands = []string{
 	"ai",
@@ -44,11 +27,11 @@ var expectedCommands = []string{
 	"parts",
 	"setup",
 	"sleep",
+	"stats",
 	"update",
 	"update self",
 	"update system",
 	"validate",
-	"aws rotate-keys",
 	"aws whoami",
 	"update uv",
 	"skills",
@@ -91,8 +74,6 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 
 func TestCommands(t *testing.T) {
 	t.Run("When comparing actual commands to expected list, they match", func(t *testing.T) {
-		isolateCommandTreeExtras(t)
-
 		allCommands := getAllCommands(rootCmd, "")
 
 		sort.Strings(allCommands)
@@ -133,8 +114,6 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When checking expected commands exist, they are all found", func(t *testing.T) {
-		isolateCommandTreeExtras(t)
-
 		allCommands := getAllCommands(rootCmd, "")
 		actualMap := make(map[string]bool)
 		for _, cmd := range allCommands {
@@ -147,8 +126,6 @@ func TestCommands(t *testing.T) {
 	})
 
 	t.Run("When checking command paths, they are well-formed", func(t *testing.T) {
-		isolateCommandTreeExtras(t)
-
 		allCommands := getAllCommands(rootCmd, "")
 
 		for _, cmd := range allCommands {

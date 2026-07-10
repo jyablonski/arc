@@ -1,20 +1,10 @@
 package brew
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/jyablonski/arc/internal/shell"
 )
-
-type PackageInfo struct {
-	Formulae []NamedPackage `json:"formulae"`
-	Casks    []NamedPackage `json:"casks"`
-}
-
-type NamedPackage struct {
-	Name string `json:"name"`
-}
 
 func CheckAvailable() error {
 	if !run.CommandExists("brew") {
@@ -61,21 +51,6 @@ func CacheSize() (string, error) {
 		return "", nil
 	}
 	return fields[0], nil
-}
-
-func InstalledInfo() (PackageInfo, error) {
-	out, err := run.Run("brew", "info", "--json=v2", "--installed")
-	if err != nil {
-		return PackageInfo{}, err
-	}
-	var info PackageInfo
-	if strings.TrimSpace(out) == "" {
-		return info, nil
-	}
-	if err := json.Unmarshal([]byte(out), &info); err != nil {
-		return PackageInfo{}, err
-	}
-	return info, nil
 }
 
 func lines(out string) []string {

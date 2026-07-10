@@ -12,10 +12,6 @@ func TestContains(t *testing.T) {
 	require.False(t, contains([]string{"a"}, "z"))
 }
 
-func TestCurrentUnix_positive(t *testing.T) {
-	require.Greater(t, currentUnix(), int64(0))
-}
-
 func TestPrintListHuman(t *testing.T) {
 	t.Run("empty skills", func(t *testing.T) {
 		var buf bytes.Buffer

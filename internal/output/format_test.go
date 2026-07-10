@@ -166,17 +166,6 @@ func TestTableLines(t *testing.T) {
 	})
 }
 
-func TestPrintKeyValue(t *testing.T) {
-	t.Run("When called, it outputs key and value to stdout", func(t *testing.T) {
-		stdout, _ := captureOutput(t, func() {
-			PrintKeyValue("Key", "Value")
-		})
-
-		assert.Contains(t, stdout, "Key")
-		assert.Contains(t, stdout, "Value")
-	})
-}
-
 // captureOutput captures both stdout and stderr during fn execution
 func captureOutput(t *testing.T, fn func()) (stdout string, stderr string) {
 	t.Helper()

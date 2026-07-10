@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/jyablonski/arc/internal/output"
-	"github.com/jyablonski/arc/internal/shell"
 )
 
 type Options struct {
@@ -19,11 +18,7 @@ func Run(opts Options) error {
 	return RunWithDeps(Deps{}, opts)
 }
 
-// PromptReboot asks whether to reboot after a kernel update.
-func PromptReboot(r *os.File) error {
-	return promptReboot(r, shell.RunInteractive)
-}
-
+// promptReboot asks whether to reboot after a kernel update.
 func promptReboot(stdin *os.File, runInteractive func(name string, args ...string) error) error {
 	output.Warning("A kernel update was successfully installed. A reboot is required for the changes to take effect.")
 	fmt.Print("Reboot now? [Y/n]: ")

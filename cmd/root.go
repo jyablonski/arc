@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
-	"github.com/jyablonski/arc/internal/extracmd"
 	"github.com/spf13/cobra"
 )
 
@@ -20,9 +20,10 @@ better argument handling, help text, colored output, and error handling.`,
 }
 
 func Execute() {
-	extracmd.ApplyVisibility()
-
-	if err := rootCmd.Execute(); err != nil {
+	start := time.Now()
+	cmd, err := rootCmd.ExecuteC()
+	recordInvocation(cmd, err == nil, time.Since(start))
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

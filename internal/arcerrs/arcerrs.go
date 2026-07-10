@@ -9,8 +9,6 @@ var (
 
 	ErrAllNotifiersFailed = errors.New("failed to send incident to all configured destinations")
 
-	ErrNoUserARN = errors.New("failed to get user ARN")
-
 	ErrValidationFailed = errors.New("validation failed: missing required tools")
 
 	ErrNotGitRepo = errors.New("not in a git repository")

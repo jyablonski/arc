@@ -13,7 +13,6 @@ import (
 )
 
 func TestUpdateSelfCmd_runs(t *testing.T) {
-	isolateCommandTreeExtras(t)
 	defer func() { rootCmd.SetArgs(nil) }()
 
 	rootCmd.SetArgs([]string{"update", "self"})
@@ -21,7 +20,6 @@ func TestUpdateSelfCmd_runs(t *testing.T) {
 }
 
 func TestUpdateUvCmd_uvMissing(t *testing.T) {
-	isolateCommandTreeExtras(t)
 	setRunner(t, &boundary.ShellRunnerMock{
 		CommandExistsFunc: func(name string) bool { return name != "uv" },
 	})

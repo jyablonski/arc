@@ -8,7 +8,14 @@ import (
 )
 
 func TestDetect(t *testing.T) {
-	require.Equal(t, Parse(runtime.GOOS), Detect())
+	switch runtime.GOOS {
+	case "linux":
+		require.Equal(t, Linux, Detect())
+	case "darwin":
+		require.Equal(t, Darwin, Detect())
+	default:
+		require.Equal(t, Unknown, Detect())
+	}
 }
 
 func TestString(t *testing.T) {

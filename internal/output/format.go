@@ -120,8 +120,3 @@ func TableLines(headers []string, rows [][]string) []string {
 	}
 	return lines
 }
-
-// PrintKeyValue prints a key-value pair
-func PrintKeyValue(key, value string) {
-	fmt.Printf("%s:\t%s\n", key, value)
-}
