@@ -1,19 +1,19 @@
 # arc
 
-A personal CLI tool for system management and maintenance on Arch Linux and macOS (my 2 primary platforms).
+A single, personal CLI for system maintenance and AI-tooling workflows on Arch Linux and macOS.
 
-## What It Does
+## Overview
 
-`arc` consolidates common system tasks into a single command-line tool. It provides a consistent interface for system operations with better argument handling, help text, colored output, and error handling.
+`arc` is a small, self-contained Go binary that pulls the everyday commands I run across my machines (system updates, package cleanup, hardware inspection, and keeping tabs on my AI coding tools) behind one consistent interface. Instead of memorizing many platform-specific commands or maintaining a ton of shell aliases, I run `arc <thing>` and get the same command, flags, and output whether I'm on Arch or a Mac.
 
-The purpose is to simplify maintenance tasks, provide AI tooling, and create a single CLI that I can use to manage my systems in a standardized way.
+Under the hood it wraps the native tools each platform already ships (pacman/yay on Arch, Homebrew on macOS) and reads the local state that tools like Claude Code and Codex write to disk. `arc` adds a few things: safer defaults, clearer failure messages, consistent `--json` output, and platform detection so one command does the right thing everywhere.
 
-It wraps those workflows with:
+## What it offers
 
-- Safer defaults and clearer failure messages
-- Consistent flags, JSON output, and help text
-- Reusable checks before running system-changing commands
-- One place to evolve personal Arch, macOS, Docker, AWS, and AI-tooling workflows
+- System maintenance: one-shot system updates, cache and orphan cleanup, package statistics, hardware and system inspection, and dependency validation, each dispatching to the right package manager for the host.
+- AI coding-tool observability: live subscription/quota usage across Claude, Codex, and Cursor (`ai usage`), plus historical local token consumption with an API-equivalent cost estimate mined from on-disk session logs (`ai tokens`).
+- Shared AI configuration: a canonical, symlink-based store for AI skills and `AGENTS.md` rules, kept in sync across Claude, Codex, Cursor, and opencode (`skills`, `rules`).
+- Self-management: self-update from GitHub releases, one-command dependency setup, and local-only usage stats for `arc` itself.
 
 Instead of remembering scattered commands or maintaining shell aliases:
 
@@ -30,24 +30,26 @@ arc ai usage
 arc ai tokens
 ```
 
+## How it works
+
+- One command, two platforms: `arc` detects the host and dispatches to the native tooling (pacman/yay/paccache on Arch, Homebrew on macOS), so the same command works on both. Arch-only flags such as `--aur-only` return a clear unsupported-platform error on macOS rather than failing silently.
+- Reads local state, never re-authenticates: the AI commands never run their own login flows. `ai usage` reads whatever credentials each vendor tool already stored (Claude's OAuth token, Codex's app-server session, Cursor's local session DB) and calls each provider's usage API, isolating failures per provider. `ai tokens` is fully offline: it scans the session transcripts Claude Code and Codex write to `~/.claude` and `~/.codex` and prices them from a local pricing table.
+- Consistent output: every command supports `--json` for scripting, with colored, human-readable output by default.
+- Local and private by default: usage tracking and token accounting stay on the machine; nothing is uploaded.
+
 ## Installation
 
-**Download the latest release:**
+Download the latest release. Most people want amd64, on Linux or an Intel Mac (swap `arc-linux-amd64` for `arc-darwin-amd64` on an Intel Mac):
 
 ```bash
 curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-linux-amd64 -o ~/.local/bin/arc
 chmod +x ~/.local/bin/arc
 ```
 
-On macOS, choose the binary for your CPU:
+On an Apple Silicon Mac:
 
 ```bash
-# Apple Silicon
 curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-darwin-arm64 -o ~/.local/bin/arc
-chmod +x ~/.local/bin/arc
-
-# Intel
-curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-darwin-amd64 -o ~/.local/bin/arc
 chmod +x ~/.local/bin/arc
 ```
 
@@ -63,7 +65,7 @@ Make sure `~/.local/bin` is in your `PATH`:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-**Or build from source:**
+Or build from source:
 
 ```bash
 git clone https://github.com/jyablonski/arc.git
@@ -81,29 +83,39 @@ arc update self
 
 ## Commands
 
-| Command         | Arch Linux                         | macOS                          | Example                        |
-| --------------- | ---------------------------------- | ------------------------------ | ------------------------------ |
-| `update system` | pacman, yay, paccache              | Homebrew                       | `arc update system`            |
-| `update self`   | GitHub release binary              | GitHub release binary          | `arc update self`              |
-| `update uv`     | `uv self update`                   | `uv self update`               | `arc update uv`                |
-| `clean`         | pacman cache and orphans           | `brew cleanup` / `autoremove`  | `arc clean --orphans-only`     |
-| `packages`      | pacman stats and size info         | Homebrew package summary       | `arc packages --json`          |
-| `info`          | fastfetch                          | fastfetch                      | `arc info`                     |
-| `parts`         | dmidecode, lspci, lshw             | system_profiler, sysctl        | `arc parts`                    |
-| `installed`     | pacman explicit packages / AUR     | Homebrew formulae              | `arc installed --count`        |
-| `sleep`         | systemd                            | pmset                          | `arc sleep`                    |
-| `validate`      | Arch dependency checks             | macOS dependency checks        | `arc validate`                 |
-| `setup`         | installs tools with pacman         | installs tools with Homebrew   | `arc setup`                    |
-| `ai usage`      | AI coding tool usage               | AI coding tool usage           | `arc ai usage`                 |
-| `ai tokens`     | Local AI token usage and cost      | Local AI token usage and cost  | `arc ai tokens`                |
-| `ai pricing`    | Refresh local model pricing cache  | Refresh local model pricing cache | `arc ai pricing`            |
-| `skills`        | Shared AI/LLM skills               | Shared AI/LLM skills           | `arc skills sync`              |
-| `rules`         | Shared AGENTS.md rules             | Shared AGENTS.md rules         | `arc rules sync`               |
-| `stats`         | Local command usage stats          | Local command usage stats      | `arc stats --json`             |
+### System maintenance
 
-Arch-only flags such as `--aur-only` and `--no-aur` return an unsupported-platform error on macOS when explicitly used.
+| Command         | Arch Linux                     | macOS                         | Example                    |
+| --------------- | ------------------------------ | ----------------------------- | -------------------------- |
+| `update system` | pacman, yay, paccache          | Homebrew                      | `arc update system`        |
+| `update uv`     | `uv self update`               | `uv self update`              | `arc update uv`            |
+| `clean`         | pacman cache and orphans       | `brew cleanup` / `autoremove` | `arc clean --orphans-only` |
+| `packages`      | pacman stats and size info     | Homebrew package summary      | `arc packages --json`      |
+| `installed`     | pacman explicit packages / AUR | Homebrew formulae             | `arc installed --count`    |
+| `info`          | fastfetch                      | fastfetch                     | `arc info`                 |
+| `parts`         | dmidecode, lspci, lshw         | system_profiler, sysctl       | `arc parts`                |
+| `sleep`         | systemd suspend                | pmset sleep                   | `arc sleep`                |
 
-Use `arc <command> --help` for detailed flag information.
+### AI tooling
+
+| Command      | Description                                                 | Example           |
+| ------------ | ---------------------------------------------------------- | ----------------- |
+| `ai usage`   | Live subscription/quota usage across Claude, Codex, Cursor | `arc ai usage`    |
+| `ai tokens`  | Historical local token usage with API-equivalent cost      | `arc ai tokens`   |
+| `ai pricing` | Refresh the local model pricing cache used by `ai tokens`  | `arc ai pricing`  |
+| `skills`     | Sync shared AI/LLM skills across providers                 | `arc skills sync` |
+| `rules`      | Sync the shared `AGENTS.md` rules file across providers    | `arc rules sync`  |
+
+### arc itself
+
+| Command       | Description                             | Example            |
+| ------------- | --------------------------------------- | ------------------ |
+| `update self` | Update `arc` to the latest release      | `arc update self`  |
+| `setup`       | Install the tools `arc` depends on      | `arc setup`        |
+| `validate`    | Check that required tools are in `PATH` | `arc validate`     |
+| `stats`       | Show local `arc` command usage stats    | `arc stats --json` |
+
+Arch-only flags such as `--aur-only` and `--no-aur` return an unsupported-platform error on macOS when explicitly used. Every command supports `--json` (`-j`); use `arc <command> --help` for detailed flag information.
 
 ## Additional Documentation
 

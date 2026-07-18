@@ -1,6 +1,6 @@
 module github.com/jyablonski/arc
 
-go 1.26
+go 1.26.5
 
 require (
 	github.com/fatih/color v1.18.0
