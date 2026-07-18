@@ -39,22 +39,17 @@ arc ai tokens
 
 ## Installation
 
-Download the latest release:
+Download the latest release. Most people want amd64, on Linux or an Intel Mac (swap `arc-linux-amd64` for `arc-darwin-amd64` on an Intel Mac):
 
 ```bash
 curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-linux-amd64 -o ~/.local/bin/arc
 chmod +x ~/.local/bin/arc
 ```
 
-On macOS, choose the binary for your CPU:
+On an Apple Silicon Mac:
 
 ```bash
-# Apple Silicon
 curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-darwin-arm64 -o ~/.local/bin/arc
-chmod +x ~/.local/bin/arc
-
-# Intel
-curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-darwin-amd64 -o ~/.local/bin/arc
 chmod +x ~/.local/bin/arc
 ```
 
