@@ -15,6 +15,7 @@ import (
 
 type Provider struct {
 	CodexBinary string
+	HomeDir     string // overrides ~ for offline health checks (tests)
 }
 
 func (p *Provider) Name() string { return "codex" }

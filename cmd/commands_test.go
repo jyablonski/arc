@@ -12,7 +12,9 @@ import (
 
 var expectedCommands = []string{
 	"ai",
+	"ai health",
 	"ai pricing",
+	"ai sessions",
 	"ai tokens",
 	"ai usage",
 	"aws",
