@@ -98,13 +98,15 @@ arc update self
 
 ### AI tooling
 
-| Command      | Description                                                 | Example           |
-| ------------ | ---------------------------------------------------------- | ----------------- |
-| `ai usage`   | Live subscription/quota usage across Claude, Codex, Cursor | `arc ai usage`    |
-| `ai tokens`  | Historical local token usage with API-equivalent cost      | `arc ai tokens`   |
-| `ai pricing` | Refresh the local model pricing cache used by `ai tokens`  | `arc ai pricing`  |
-| `skills`     | Sync shared AI/LLM skills across providers                 | `arc skills sync` |
-| `rules`      | Sync the shared `AGENTS.md` rules file across providers    | `arc rules sync`  |
+| Command       | Description                                                | Example           |
+| ------------- | ---------------------------------------------------------- | ----------------- |
+| `ai usage`    | Live subscription/quota usage across Claude, Codex, Cursor | `arc ai usage`    |
+| `ai tokens`   | Historical local token usage with API-equivalent cost      | `arc ai tokens`   |
+| `ai sessions` | List recent local Claude and Codex sessions                | `arc ai sessions` |
+| `ai health`   | Offline auth/tooling/config health check across AI tools   | `arc ai health`   |
+| `ai pricing`  | Refresh the local model pricing cache used by `ai tokens`  | `arc ai pricing`  |
+| `skills`      | Sync shared AI/LLM skills across providers                 | `arc skills sync` |
+| `rules`       | Sync the shared `AGENTS.md` rules file across providers    | `arc rules sync`  |
 
 ### arc itself
 

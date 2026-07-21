@@ -15,6 +15,8 @@ var (
 
 	ErrEmptyProviderFilter = errors.New("--provider: empty after parsing")
 
+	ErrHealthCheckFailed = errors.New("one or more AI health checks failed")
+
 	ErrAUROnlyLinuxOnly = errors.New("--aur-only is only supported on Linux")
 
 	ErrNoAURLinuxOnly = errors.New("--no-aur is only supported on Linux")

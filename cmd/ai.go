@@ -18,6 +18,7 @@ import (
 	"github.com/jyablonski/arc/internal/ai/presentation"
 	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/output"
+	"github.com/jyablonski/arc/internal/skills"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +34,13 @@ var (
 	aiTokensShowTotalTokens bool
 	aiPricingSource         string
 	aiPricingDryRun         bool
+	aiSessionsProvider      string
+	aiSessionsSince         string
+	aiSessionsUntil         string
+	aiSessionsLimit         int
+	aiSessionsSearch        string
+	aiSessionsResume        bool
+	aiHealthProvider        string
 )
 
 var aiCmd = &cobra.Command{
@@ -84,15 +92,37 @@ can be priced immediately by adding it to the override file, which always wins.`
 	RunE: runAIPricing,
 }
 
+var aiHealthCmd = &cobra.Command{
+	Use:   "health",
+	Short: "Check AI tool auth, tooling, and local config offline",
+	Long: `Runs offline health checks across the AI toolchain: whether Claude, Codex,
+and Cursor are authenticated (and whether their tokens are live or expired),
+whether the CLIs are on PATH, whether the shared skills/rules configs are in
+sync, and whether the pricing cache is fresh.
+
+Fully offline: unlike "arc ai usage" it makes no network calls and never
+refreshes a token. Exits non-zero if any check fails (warnings do not fail).`,
+	RunE: runAIHealth,
+}
+
+var aiSessionsCmd = &cobra.Command{
+	Use:   "sessions",
+	Short: "List recent local Claude and Codex sessions",
+	Long: `Lists recent Claude Code and Codex sessions, newest first, from the same
+local JSONL logs that back "arc ai tokens". Shows each session's project,
+model, message count, token total, and a title or first-prompt preview.
+
+Fully offline: no network calls and nothing is written. Use --resume to also
+print the command that reopens each session in its own tool.`,
+	RunE: runAISessions,
+}
+
 func runAIUsage(cmd *cobra.Command, args []string) error {
 	_ = args
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	filters := ai.ParseProviderCSV(aiUsageProvider)
-	if aiUsageProvider != "" && len(filters) == 0 {
-		return arcerrs.ErrEmptyProviderFilter
-	}
-	if err := ai.ValidateProviderFilters(filters); err != nil {
+	filters, err := parseProviderFilter(aiUsageProvider, ai.ValidateProviderFilters)
+	if err != nil {
 		return err
 	}
 
@@ -134,11 +164,8 @@ func runAITokens(cmd *cobra.Command, args []string) error {
 	_ = args
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	filters := ai.ParseProviderCSV(aiTokensProvider)
-	if aiTokensProvider != "" && len(filters) == 0 {
-		return arcerrs.ErrEmptyProviderFilter
-	}
-	if err := ai.ValidateHistoryProviderFilters(filters); err != nil {
+	filters, err := parseProviderFilter(aiTokensProvider, ai.ValidateHistoryProviderFilters)
+	if err != nil {
 		return err
 	}
 	if err := ai.ValidateHistoryGroupBy(aiTokensGroupBy); err != nil {
@@ -166,6 +193,153 @@ func runAITokens(cmd *cobra.Command, args []string) error {
 	}
 	presentation.PrintHistory(report, presentation.HistoryPrintOptions{ShowTotalTokens: aiTokensShowTotalTokens})
 	return ai.ExitErrorIfAllHistoryProvidersFailed(report)
+}
+
+func runAIHealth(cmd *cobra.Command, args []string) error {
+	_ = args
+	jsonOut, _ := cmd.Flags().GetBool("json")
+
+	filters, err := parseProviderFilter(aiHealthProvider, ai.ValidateProviderFilters)
+	if err != nil {
+		return err
+	}
+
+	checks := ai.RunHealthCheckers(cmd.Context(), localHealthCheckers(), filters)
+	if aiHealthProvider == "" {
+		checks = append(checks, globalHealthChecks()...)
+	}
+	report := ai.HealthReport{FetchedAt: time.Now(), Checks: checks}
+
+	if jsonOut {
+		if err := ai.EncodeHealthJSON(os.Stdout, report); err != nil {
+			return err
+		}
+	} else {
+		presentation.PrintHealth(report)
+	}
+	if report.HasFailure() {
+		return arcerrs.ErrHealthCheckFailed
+	}
+	return nil
+}
+
+func localHealthCheckers() []ai.HealthChecker {
+	return []ai.HealthChecker{
+		&aiclaude.Provider{},
+		&aicodex.Provider{},
+		&aicursor.Provider{},
+	}
+}
+
+// globalHealthChecks are the machine-wide checks not tied to a single provider:
+// pricing-cache freshness and shared skills/rules sync state.
+func globalHealthChecks() []ai.HealthCheck {
+	checks := []ai.HealthCheck{pricingCacheCheck()}
+	return append(checks, configSyncChecks()...)
+}
+
+func pricingCacheCheck() ai.HealthCheck {
+	c := ai.HealthCheck{Category: "pricing", Name: "pricing"}
+	cf, ok, err := ai.ReadPricingCacheFile()
+	switch {
+	case err != nil:
+		c.Status = ai.HealthWarn
+		c.Detail = "pricing cache unreadable: " + err.Error()
+		c.Hint = "run 'arc ai pricing'"
+	case !ok:
+		c.Status = ai.HealthWarn
+		c.Detail = "no pricing cache; 'arc ai tokens' falls back to built-in defaults"
+		c.Hint = "run 'arc ai pricing' to refresh"
+	default:
+		age := time.Since(cf.FetchedAt)
+		if age > 30*24*time.Hour {
+			c.Status = ai.HealthWarn
+			c.Detail = fmt.Sprintf("pricing cache is %d days old", int(age.Hours()/24))
+			c.Hint = "run 'arc ai pricing'"
+		} else {
+			c.Status = ai.HealthOK
+			c.Detail = fmt.Sprintf("%d models, refreshed %s", len(cf.Prices), cf.FetchedAt.Format("2006-01-02"))
+		}
+	}
+	return c
+}
+
+func configSyncChecks() []ai.HealthCheck {
+	paths := skills.DefaultPaths()
+	m := skills.New(skills.Config{})
+	var checks []ai.HealthCheck
+
+	if _, err := os.Stat(paths.SkillsRoot); err == nil {
+		if res, err := m.List(); err != nil {
+			checks = append(checks, ai.HealthCheck{Category: "config", Name: "skills", Status: ai.HealthWarn, Detail: "cannot list skills: " + err.Error()})
+		} else {
+			bad := 0
+			for _, s := range res.Skills {
+				for _, st := range s.Providers {
+					if st == skills.StatusDangling || st == skills.StatusConflict {
+						bad++
+					}
+				}
+			}
+			if bad > 0 {
+				checks = append(checks, ai.HealthCheck{Category: "config", Name: "skills", Status: ai.HealthWarn, Detail: fmt.Sprintf("%d skill link(s) dangling or conflicted", bad), Hint: "run 'arc skills sync' (or 'arc skills prune')"})
+			} else {
+				checks = append(checks, ai.HealthCheck{Category: "config", Name: "skills", Status: ai.HealthOK, Detail: fmt.Sprintf("%d canonical skills linked cleanly", len(res.Skills))})
+			}
+		}
+	}
+
+	if _, err := os.Stat(paths.RulesFile); err == nil {
+		drift := 0
+		for _, e := range m.StatusRules().Providers {
+			if e.Status != skills.StatusOK {
+				drift++
+			}
+		}
+		if drift > 0 {
+			checks = append(checks, ai.HealthCheck{Category: "config", Name: "rules", Status: ai.HealthWarn, Detail: fmt.Sprintf("%d provider(s) out of sync with AGENTS.md", drift), Hint: "run 'arc rules sync'"})
+		} else {
+			checks = append(checks, ai.HealthCheck{Category: "config", Name: "rules", Status: ai.HealthOK, Detail: "AGENTS.md linked in all providers"})
+		}
+	}
+
+	return checks
+}
+
+func runAISessions(cmd *cobra.Command, args []string) error {
+	_ = args
+	jsonOut, _ := cmd.Flags().GetBool("json")
+
+	filters, err := parseProviderFilter(aiSessionsProvider, ai.ValidateHistoryProviderFilters)
+	if err != nil {
+		return err
+	}
+	if aiSessionsLimit < 0 {
+		return fmt.Errorf("--limit must be >= 0")
+	}
+
+	histOpts, err := parseHistoryOptions(aiSessionsSince, aiSessionsUntil)
+	if err != nil {
+		return err
+	}
+	opts := ai.SessionOptions{
+		Since:  histOpts.Since,
+		Until:  histOpts.Until,
+		Limit:  aiSessionsLimit,
+		Search: strings.TrimSpace(aiSessionsSearch),
+	}
+
+	report := ai.RunSessionProviders(cmd.Context(), localSessionProviders(), filters, opts)
+	report.FetchedAt = time.Now()
+
+	if jsonOut {
+		if err := ai.EncodeSessionsJSON(os.Stdout, report); err != nil {
+			return err
+		}
+		return ai.ExitErrorIfAllSessionProvidersFailed(report)
+	}
+	presentation.PrintSessions(report, presentation.SessionsPrintOptions{ShowResume: aiSessionsResume})
+	return ai.ExitErrorIfAllSessionProvidersFailed(report)
 }
 
 func runAIPricing(cmd *cobra.Command, args []string) error {
@@ -245,6 +419,19 @@ func newModelKeys(prev, next map[string]ai.ModelPrice) []string {
 	}
 	sort.Strings(added)
 	return added
+}
+
+// parseProviderFilter parses a --provider CSV, rejecting a non-empty value that
+// resolves to nothing, and validates the names against the given validator.
+func parseProviderFilter(raw string, validate func([]string) error) ([]string, error) {
+	filters := ai.ParseProviderCSV(raw)
+	if raw != "" && len(filters) == 0 {
+		return nil, arcerrs.ErrEmptyProviderFilter
+	}
+	if err := validate(filters); err != nil {
+		return nil, err
+	}
+	return filters, nil
 }
 
 func parseHistoryOptions(sinceRaw, untilRaw string) (ai.HistoryOptions, error) {
@@ -327,6 +514,13 @@ func localHistoryProviders() []ai.HistoryProvider {
 	}
 }
 
+func localSessionProviders() []ai.SessionProvider {
+	return []ai.SessionProvider{
+		&aiclaude.HistoryProvider{},
+		&aicodex.HistoryProvider{},
+	}
+}
+
 func aiExitJSON(w io.Writer, agg ai.AggregateReport) error {
 	if err := ai.EncodeAggregateJSON(w, agg); err != nil {
 		return err
@@ -346,8 +540,17 @@ func init() {
 	aiTokensCmd.Flags().BoolVar(&aiTokensShowTotalTokens, "show-total-tokens", false, "Show the aggregate token total column; hidden by default because cache reads can dominate raw totals")
 	aiPricingCmd.Flags().StringVar(&aiPricingSource, "source", "", "Pricing table URL in LiteLLM JSON format (default LiteLLM's table)")
 	aiPricingCmd.Flags().BoolVar(&aiPricingDryRun, "dry-run", false, "Fetch and report without writing the cache")
+	aiSessionsCmd.Flags().StringVar(&aiSessionsProvider, "provider", "", "Only these providers (comma-separated): claude, codex")
+	aiSessionsCmd.Flags().StringVar(&aiSessionsSince, "since", "", "Only sessions active on or after this date (YYYY-MM-DD or RFC3339)")
+	aiSessionsCmd.Flags().StringVar(&aiSessionsUntil, "until", "", "Only sessions started on or before this date (YYYY-MM-DD or RFC3339)")
+	aiSessionsCmd.Flags().IntVar(&aiSessionsLimit, "limit", 20, "Show at most this many sessions (0 for no limit)")
+	aiSessionsCmd.Flags().StringVar(&aiSessionsSearch, "search", "", "Only sessions whose project, title, or id contains this text")
+	aiSessionsCmd.Flags().BoolVar(&aiSessionsResume, "resume", false, "Also print the command to resume each session")
+	aiHealthCmd.Flags().StringVar(&aiHealthProvider, "provider", "", "Only these providers (comma-separated): claude, codex, cursor")
 	aiCmd.AddCommand(aiUsageCmd)
 	aiCmd.AddCommand(aiTokensCmd)
 	aiCmd.AddCommand(aiPricingCmd)
+	aiCmd.AddCommand(aiSessionsCmd)
+	aiCmd.AddCommand(aiHealthCmd)
 	rootCmd.AddCommand(aiCmd)
 }
