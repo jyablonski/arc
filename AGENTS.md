@@ -34,6 +34,7 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 - `internal/brew` — Homebrew helpers for macOS package commands
 - `internal/pacman` — pacman helpers for Linux package commands
 - `internal/sysupdate` — Linux `arc update system` workflow
+- `internal/mcp` — `arc mcp` shared MCP server config (see below)
 - `internal/gitcleanup` — `arc git cleanup` logic
 - `internal/selfupdate` — `arc update self`
 - `internal/ai` — `arc ai usage` (live provider quota, networked) and `arc ai tokens` (local Claude/Codex session-log token history, offline). Pricing layers a hand-edited override (`~/.config/arc/ai-pricing.json`) over a fetched cache (`~/.cache/arc/ai-pricing.json`, refreshed by `arc ai pricing`) over built-in defaults (`internal/ai/pricing.go`). See `docs/ai_tokens.md`.
@@ -59,6 +60,10 @@ Linux-only flags (`--aur-only`, `--no-aur`) should return a clear unsupported-pl
 ## `internal/skills`
 
 Implements `arc skills` and `arc rules`: canonical `~/ai/skills/`, symlinks into provider dirs, `SKILL.md` + YAML frontmatter. Tests use `ARC_*` path overrides (see `paths.go`).
+
+## `internal/mcp`
+
+Implements `arc mcp`: canonical `~/ai/mcp.json` rendered into each provider's dialect. Deliberately **not** symlink-based — Claude, Codex, and opencode keep MCP servers inside a larger file they also own, so `Provider` implementations merge surgically (order-preserving JSON via `jsonobj.go`, line-splicing TOML via `toml.go`) and rewrite only servers `arc` owns per `~/.config/arc/mcp-state.json`. Adding a provider means implementing `Provider` (`Name`/`ConfigPath`/`Supports`/`Normalize`/`Read`/`Write`/`OmitsDisabled`) and registering it in `DefaultProviders`. All writes go through `writeFileAtomic` (temp file + rename, existing mode preserved) — never `os.WriteFile`: sync rewrites files the AI tools own and keep unrelated state in. `Normalize` must report the round-trip through that dialect or `list` will show permanent drift. Health checks live in `health.go` and are wired into `arc ai health` from `cmd/ai.go`. Tests use `ARC_*` path overrides (see `paths.go`).
 
 ## Release
 
