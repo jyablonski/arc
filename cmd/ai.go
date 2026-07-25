@@ -17,6 +17,7 @@ import (
 	aicursor "github.com/jyablonski/arc/internal/ai/cursor"
 	"github.com/jyablonski/arc/internal/ai/presentation"
 	"github.com/jyablonski/arc/internal/arcerrs"
+	"github.com/jyablonski/arc/internal/mcp"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/skills"
 	"github.com/spf13/cobra"
@@ -232,10 +233,12 @@ func localHealthCheckers() []ai.HealthChecker {
 }
 
 // globalHealthChecks are the machine-wide checks not tied to a single provider:
-// pricing-cache freshness and shared skills/rules sync state.
+// pricing-cache freshness, shared skills/rules sync state, and MCP server
+// config across providers.
 func globalHealthChecks() []ai.HealthCheck {
 	checks := []ai.HealthCheck{pricingCacheCheck()}
-	return append(checks, configSyncChecks()...)
+	checks = append(checks, configSyncChecks()...)
+	return append(checks, mcp.HealthChecks(mcp.New(mcp.Config{}))...)
 }
 
 func pricingCacheCheck() ai.HealthCheck {

@@ -47,6 +47,13 @@ var expectedCommands = []string{
 	"rules",
 	"rules sync",
 	"rules status",
+	"mcp",
+	"mcp list",
+	"mcp sync",
+	"mcp import",
+	"mcp add <name>",
+	"mcp remove <name>",
+	"mcp validate",
 }
 
 func getAllCommands(cmd *cobra.Command, prefix string) []string {
