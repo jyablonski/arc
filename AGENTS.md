@@ -31,7 +31,7 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 - `internal/brew` — Homebrew helpers for macOS package commands
 - `internal/pacman` — pacman helpers for Linux package commands
 - `internal/sysupdate` — Linux `arc update system` workflow
-- `internal/aurreview` — pre-yay AUR takeover triage (provenance baseline, snapshot diff scan, cluster detection); state under `~/.local/state/arc/`
+- `internal/aurreview` — pre-yay AUR takeover triage (provenance baseline, snapshot diff scan, cluster detection); state under `~/.local/state/arc/`. See `docs/aur_review.md`.
 - `internal/mcp` — `arc mcp` shared MCP server config (see below)
 - `internal/gitcleanup` — `arc git cleanup` logic
 - `internal/selfupdate` — `arc update self`

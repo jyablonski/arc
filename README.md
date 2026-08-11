@@ -125,6 +125,7 @@ Arch-only flags such as `--aur-only` and `--no-aur` return an unsupported-platfo
 
 More detailed notes are available in `docs/`:
 
+- [AUR review](docs/aur_review.md)
 - [AI usage](docs/ai_usage.md)
 - [AI tokens](docs/ai_tokens.md)
 - [AI pricing](docs/ai_pricing.md)
