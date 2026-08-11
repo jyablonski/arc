@@ -33,6 +33,7 @@ arc ai tokens
 ## How it works
 
 - One command, two platforms: `arc` detects the host and dispatches to the native tooling (pacman/yay/paccache on Arch, Homebrew on macOS), so the same command works on both. Arch-only flags such as `--aur-only` return a clear unsupported-platform error on macOS rather than failing silently.
+- AUR takeover triage: before yay runs, `arc update system` checks pending AUR updates for takeover signals (maintainer changes, orphan adoptions, deletions, one account grabbing many packages) and scans changed package files for high-signal patterns, flagging only what's new since the last trusted run. It surfaces findings; you still decide at yay's diffmenu. See [platforms](docs/platforms.md) for details.
 - Reads local state, never re-authenticates: the AI commands never run their own login flows. `ai usage` reads whatever credentials each vendor tool already stored (Claude's OAuth token, Codex's app-server session, Cursor's local session DB) and calls each provider's usage API, isolating failures per provider. `ai tokens` is fully offline: it scans the session transcripts Claude Code and Codex write to `~/.claude` and `~/.codex` and prices them from a local pricing table.
 - Consistent output: every command supports `--json` for scripting, with colored, human-readable output by default.
 - Local and private by default: usage tracking and token accounting stay on the machine; nothing is uploaded.
