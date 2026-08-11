@@ -103,7 +103,7 @@ func runAURReview(d Deps) *aurreview.Result {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	result, err := d.ReviewAUR(ctx, installed)
 	if err != nil {

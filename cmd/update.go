@@ -45,7 +45,10 @@ var updateSystemCmd = &cobra.Command{
 	Short: "Run system package updates",
 	Long: `Update the system packages. Linux runs pacman -Syu, optionally yay -Syu --aur,
 and optional paccache cleanup. AUR updates are interactive and force yay's diff
-and PKGBUILD review prompts. macOS runs brew update, brew upgrade, and optional
+and PKGBUILD review prompts; before yay runs, arc triages pending AUR updates
+for takeover signals (maintainer changes, orphan adoptions, AUR deletions) and
+scans changed package files for high-signal patterns, flagging only what's new
+since the last trusted run. macOS runs brew update, brew upgrade, and optional
 brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {

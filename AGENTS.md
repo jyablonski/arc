@@ -7,14 +7,12 @@ Go + Cobra CLI for Linux/macOS maintenance. Layout: `main.go` → `cmd/` (Cobra)
 ```bash
 make build
 go build -o bin/arc .
-ARC_EXTRA_COMMANDS= go test ./...
+go test ./...
 GOOS=darwin go test -exec=true ./...   # macOS compile-oriented check from Linux
 make mocks   # optional — regenerates moq `*_moq.go` after interface edits
 make coverage       # filtered coverage.out (+ coverage.full.out raw)
 make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as coverage)
 ```
-
-`ARC_EXTRA_COMMANDS` is unset for baseline command-tree tests in `commands_test.go` so CI and local shells with `ARC_EXTRA_COMMANDS=1` stay deterministic. Visibility for those commands is `internal/extracmd`.
 
 **Coverage reporting:** **`make coverage`**, **`make test-ci`**, and **`make coverage-app`** all write **`coverage.out`** as the **filtered** profile (moq-generated `*_moq.go` lines removed via `awk`), copied from **`coverage.app.out`**. The unfiltered merge stays in **`coverage.full.out`** for debugging. Hand-written code percentages come from `coverage.out`; generated mocks still inflate **`coverage.full.out`** if you inspect it. **`main_test.go`** exercises **`cmd.Execute`** in-process and runs a **`go build` + `arc help`** subprocess smoke test (`TestArcBinary_smoke` skips when `-short`).
 
@@ -24,7 +22,6 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 
 - `internal/boundary` — narrow interfaces + moq stubs for HTTP / shell boundaries (`DefaultShell` delegates to `internal/shell`)
 - `internal/arcerrs` — sentinel errors returned from commands
-- `internal/extracmd` — `ARC_EXTRA_COMMANDS` gating and admin command visibility
 - `internal/platform` — typed GOOS detection (`Detect`, `Parse`, `OS.String`)
 - `internal/pkgmgr` — package-management boundary selected once in `cmd.App`
 - `internal/syscontrol` — system-control boundary selected once in `cmd.App`
@@ -34,6 +31,7 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 - `internal/brew` — Homebrew helpers for macOS package commands
 - `internal/pacman` — pacman helpers for Linux package commands
 - `internal/sysupdate` — Linux `arc update system` workflow
+- `internal/aurreview` — pre-yay AUR takeover triage (provenance baseline, snapshot diff scan, cluster detection); state under `~/.local/state/arc/`. See `docs/aur_review.md`.
 - `internal/mcp` — `arc mcp` shared MCP server config (see below)
 - `internal/gitcleanup` — `arc git cleanup` logic
 - `internal/selfupdate` — `arc update self`
@@ -59,7 +57,7 @@ Linux-only flags (`--aur-only`, `--no-aur`) should return a clear unsupported-pl
 
 ## `internal/skills`
 
-Implements `arc skills` and `arc rules`: canonical `~/ai/skills/`, symlinks into provider dirs, `SKILL.md` + YAML frontmatter. Tests use `ARC_*` path overrides (see `paths.go`).
+Implements `arc skills` and `arc rules`: canonical `~/ai/skills/`, symlinks into provider dirs, each skill a `~/ai/skills/<name>/SKILL.md` with YAML frontmatter. Tests use `ARC_*` path overrides (see `paths.go`).
 
 ## `internal/mcp`
 
