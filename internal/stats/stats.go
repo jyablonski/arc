@@ -12,13 +12,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jyablonski/arc/internal/filemode"
+	"github.com/jyablonski/arc/internal/statepath"
 )
 
 // NoTrackEnvVar disables invocation tracking when set to a truthy value.
@@ -50,21 +50,11 @@ func Enabled() bool {
 // so it falls back to the user config dir (~/Library/Application Support/arc).
 // State is deliberately kept out of the cache dir so cache wipes don't erase it.
 func LogPath() (string, error) {
-	if base := os.Getenv("XDG_STATE_HOME"); base != "" {
-		return filepath.Join(base, "arc", logFileName), nil
-	}
-	if runtime.GOOS == "darwin" {
-		base, err := os.UserConfigDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(base, "arc", logFileName), nil
-	}
-	home, err := os.UserHomeDir()
+	dir, err := statepath.ArcDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "state", "arc", logFileName), nil
+	return filepath.Join(dir, logFileName), nil
 }
 
 // Append writes one entry to the log. Each entry is a single short JSON line

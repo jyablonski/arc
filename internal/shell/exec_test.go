@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,15 @@ func TestCommandExists(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestRunLogged_hiddenCapturesBothStreamsAndExitError(t *testing.T) {
+	var log bytes.Buffer
+	err := RunLogged(&log, false, "sh", "-c", "printf stdout; printf stderr >&2; exit 7")
+
+	require.Error(t, err)
+	assert.Contains(t, log.String(), "stdout")
+	assert.Contains(t, log.String(), "stderr")
 }
 
 func TestRun(t *testing.T) {

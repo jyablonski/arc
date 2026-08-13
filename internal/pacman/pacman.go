@@ -122,9 +122,23 @@ func GetForeignPackageVersions() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parsePackageVersions(output), nil
+}
+
+// GetInstalledPackageVersions returns every installed package as a
+// name->version map, parsed from `pacman -Q`.
+func GetInstalledPackageVersions() (map[string]string, error) {
+	output, err := run.Run("pacman", "-Q")
+	if err != nil {
+		return nil, err
+	}
+	return parsePackageVersions(output), nil
+}
+
+func parsePackageVersions(output string) map[string]string {
 	versions := map[string]string{}
 	if output == "" {
-		return versions, nil
+		return versions
 	}
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		fields := strings.Fields(line)
@@ -132,7 +146,7 @@ func GetForeignPackageVersions() (map[string]string, error) {
 			versions[fields[0]] = fields[1]
 		}
 	}
-	return versions, nil
+	return versions
 }
 
 // GetTotalInstalledSize returns the total installed size in GiB

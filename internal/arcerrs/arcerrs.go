@@ -20,4 +20,6 @@ var (
 	ErrAUROnlyLinuxOnly = errors.New("--aur-only is only supported on Linux")
 
 	ErrNoAURLinuxOnly = errors.New("--no-aur is only supported on Linux")
+
+	ErrAssumeYesLinuxOnly = errors.New("--yes is only supported for system updates on Linux")
 )

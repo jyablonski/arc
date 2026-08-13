@@ -1,6 +1,8 @@
 # Reviewing AUR Diffs
 
-`arc update system` triages pending AUR updates before yay runs (see [platforms](platforms.md) for what gets flagged and where state lives), but the final call happens at yay's diffmenu, where you read the actual diff and decide whether to build. This doc covers how to drive that menu and, more importantly, how to tell a routine update from a malicious one.
+`arc update system` summarizes pending AUR updates and points out changes worth extra attention. Yay then shows its review and approval gates, resolves dependencies, and performs the build; you decide whether to continue. Arc keeps routine source, compiler, test, and packaging chatter in the run log while surfacing important warnings and concise progress in the terminal.
+
+Arc trusts a reviewed snapshot only after the installed state matches the reviewed plan. A canceled or unsuccessful update remains flagged next time. See [platforms](platforms.md) for the checks and state locations.
 
 ## Driving yay's diffmenu
 
