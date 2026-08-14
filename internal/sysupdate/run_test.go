@@ -56,6 +56,18 @@ func TestRunWithDeps_success_skipAUR_skipCache(t *testing.T) {
 	}, logged)
 }
 
+func TestRunWithDeps_defaultDoesNotCreatePersistentLog(t *testing.T) {
+	deps := testDepsKernelStable(t)
+	created := false
+	deps.NewLog = func(time.Time) (*runLog, error) {
+		created = true
+		return nil, errors.New("must not create a log")
+	}
+
+	require.NoError(t, RunWithDeps(deps, Options{SkipAUR: true, SkipCache: true}))
+	require.False(t, created)
+}
+
 func TestPackageVersionResult_unavailableDoesNotClaimUpdate(t *testing.T) {
 	require.Equal(t, "status unavailable", packageVersionResult("archlinux-keyring", nil, nil, errors.New("query failed"), nil))
 }
@@ -75,7 +87,7 @@ func TestRunWithDeps_outputContract(t *testing.T) {
 	logFile, err := os.CreateTemp(t.TempDir(), "update-output-*.log")
 	require.NoError(t, err)
 	deps.NewLog = func(time.Time) (*runLog, error) {
-		return &runLog{file: logFile, path: "/state/arc/update-output.log"}, nil
+		return &runLog{file: logFile, writer: logFile, path: "/state/arc/update-output.log"}, nil
 	}
 	deps.RepoPlan = func() ([]PackageChange, error) {
 		return []PackageChange{{Name: "bolt", FromVersion: "0.9.11-2", ToVersion: "0.9.11-3", SizeBytes: 1024 * 1024}}, nil
@@ -90,7 +102,7 @@ func TestRunWithDeps_outputContract(t *testing.T) {
 		return map[string]string{"archlinux-keyring": "20260727-1", "bolt": bolt}, nil
 	}
 
-	require.NoError(t, RunWithDeps(deps, Options{SkipAUR: true, SkipCache: true}))
+	require.NoError(t, RunWithDeps(deps, Options{SkipAUR: true, SkipCache: true, Log: true}))
 	require.Equal(t, ""+
 		"arc update system                                        2026-08-13 07:51:25\n"+
 		"────────────────────────────────────────────────────────────────────────────\n\n"+
@@ -145,4 +157,24 @@ func TestRunWithDeps_keyringFails(t *testing.T) {
 	err := RunWithDeps(deps, Options{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "keyring update failed")
+}
+
+func TestRunWithDeps_failureTailWithoutPersistentLog(t *testing.T) {
+	deps := testDepsKernelStable(t)
+	var out bytes.Buffer
+	deps.Out = &out
+	deps.RunLogged = func(log io.Writer, _ bool, name string, args ...string) error {
+		if name == "sudo" && len(args) >= 2 && args[0] == "pacman" && args[1] == "-Sy" {
+			_, writeErr := io.WriteString(log, "keyring diagnostic detail\n")
+			require.NoError(t, writeErr)
+			return errors.New("keyring failed")
+		}
+		return nil
+	}
+
+	err := RunWithDeps(deps, Options{})
+	require.ErrorContains(t, err, "keyring update failed")
+	require.Contains(t, out.String(), "subprocess output:")
+	require.Contains(t, out.String(), "keyring diagnostic detail")
+	require.NotContains(t, out.String(), "\n  log ")
 }

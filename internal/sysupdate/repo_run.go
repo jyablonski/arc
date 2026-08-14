@@ -75,7 +75,7 @@ func runRepoUpdate(d Deps, renderer Renderer, log *runLog, reader *bufio.Reader,
 	args := []string{"pacman", "-Su", "--noconfirm", "--noprogressbar", "--color", "never"}
 	updateLogStart := log.command("sudo", args...)
 	stopProgress := renderer.Progress(fmt.Sprintf("updating %d %s…", len(plan), plural(len(plan), "package", "packages")))
-	err = d.RunLogged(log.file, false, "sudo", args...)
+	err = d.RunLogged(log.Writer(), false, "sudo", args...)
 	stopProgress()
 	if err != nil {
 		return false, false, renderRunFailure(renderer, log, updateLogStart, "pacman update failed", err)

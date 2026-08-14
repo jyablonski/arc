@@ -166,6 +166,7 @@ func (w *aurOutput) processLine(raw string) {
 	}
 	if isInlineAURPrompt(line) {
 		w.stopPhase()
+		w.installPlan = false
 		w.flushSelections()
 		w.nativeLine(line)
 		return
@@ -251,6 +252,7 @@ func (w *aurOutput) showPartialPrompt() {
 	}
 	if isInlineAURPrompt(line) {
 		w.stopPhase()
+		w.installPlan = false
 		w.flushSelections()
 		_, _ = fmt.Fprintf(w.out, "  %s ", line)
 		w.pending = ""

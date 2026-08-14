@@ -1,6 +1,6 @@
 # Reviewing AUR Diffs
 
-`arc update system` summarizes pending AUR updates and points out changes worth extra attention. Yay then shows its review and approval gates, resolves dependencies, and performs the build; you decide whether to continue. Arc keeps routine source, compiler, test, and packaging chatter in the run log while surfacing important warnings and concise progress in the terminal.
+`arc update system` summarizes pending AUR updates and points out changes worth extra attention. Yay then shows its review and approval gates, resolves dependencies, and performs the build; you decide whether to continue. Arc keeps routine source, compiler, test, and packaging chatter out of the terminal while surfacing important warnings and concise progress. Use `--log` when you want that complete raw output saved to a private file.
 
 Arc trusts a reviewed snapshot only after the installed state matches the reviewed plan. A canceled or unsuccessful update remains flagged next time. See [platforms](platforms.md) for the checks and state locations.
 

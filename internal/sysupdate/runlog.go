@@ -2,6 +2,7 @@ package sysupdate
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -21,8 +22,15 @@ const (
 )
 
 type runLog struct {
-	file *os.File
-	path string
+	file   *os.File
+	memory *tailBuffer
+	writer io.Writer
+	path   string
+}
+
+type tailBuffer struct {
+	data    []byte
+	written int64
 }
 
 // LogCleanupResult summarizes update logs removed by CleanUpdateLogs.
@@ -52,7 +60,12 @@ func newRunLogIn(dir string, now time.Time) (*runLog, error) {
 		_ = f.Close()
 		return nil, fmt.Errorf("protect update log: %w", err)
 	}
-	return &runLog{file: f, path: f.Name()}, nil
+	return &runLog{file: f, writer: f, path: f.Name()}, nil
+}
+
+func newMemoryRunLog() *runLog {
+	memory := &tailBuffer{}
+	return &runLog{memory: memory, writer: memory}
 }
 
 func updateLogDir() (string, error) {
@@ -135,23 +148,30 @@ func (l *runLog) Close() error {
 	return l.file.Close()
 }
 
+func (l *runLog) Writer() io.Writer {
+	if l == nil || l.writer == nil {
+		return io.Discard
+	}
+	return l.writer
+}
+
 func (l *runLog) command(name string, args ...string) int64 {
-	if l == nil || l.file == nil {
+	if l == nil {
 		return 0
 	}
 	parts := append([]string{name}, args...)
 	for i, part := range parts {
 		parts[i] = strconv.Quote(part)
 	}
-	_, _ = fmt.Fprintf(l.file, "\n[%s] command %s\n", time.Now().Format(time.RFC3339), strings.Join(parts, " "))
+	_, _ = fmt.Fprintf(l.Writer(), "\n[%s] command %s\n", time.Now().Format(time.RFC3339), strings.Join(parts, " "))
 	return l.position()
 }
 
 func (l *runLog) note(message string) {
-	if l == nil || l.file == nil {
+	if l == nil {
 		return
 	}
-	_, _ = fmt.Fprintf(l.file, "[%s] %s\n", time.Now().Format(time.RFC3339), message)
+	_, _ = fmt.Fprintf(l.Writer(), "[%s] %s\n", time.Now().Format(time.RFC3339), message)
 }
 
 func (l *runLog) tail() []string {
@@ -159,7 +179,13 @@ func (l *runLog) tail() []string {
 }
 
 func (l *runLog) position() int64 {
-	if l == nil || l.file == nil {
+	if l == nil {
+		return 0
+	}
+	if l.memory != nil {
+		return l.memory.written
+	}
+	if l.file == nil {
 		return 0
 	}
 	position, err := l.file.Seek(0, io.SeekCurrent)
@@ -170,7 +196,14 @@ func (l *runLog) position() int64 {
 }
 
 func (l *runLog) tailFrom(commandStart int64) []string {
-	if l == nil || l.file == nil {
+	if l == nil {
+		return nil
+	}
+	if l.memory != nil {
+		b, truncated := l.memory.from(commandStart)
+		return sanitizedTail(b, truncated)
+	}
+	if l.file == nil {
 		return nil
 	}
 	_ = l.file.Sync()
@@ -189,12 +222,15 @@ func (l *runLog) tailFrom(commandStart int64) []string {
 	if err != nil {
 		return nil
 	}
+	return sanitizedTail(b, truncated)
+}
+
+func sanitizedTail(b []byte, truncated bool) []string {
 	if truncated {
-		if newline := strings.IndexByte(string(b), '\n'); newline >= 0 {
+		if newline := bytes.IndexByte(b, '\n'); newline >= 0 {
 			b = b[newline+1:]
 		}
 	}
-
 	text := strings.ReplaceAll(string(b), "\r", "\n")
 	var lines []string
 	scanner := bufio.NewScanner(strings.NewReader(text))
@@ -208,6 +244,28 @@ func (l *runLog) tailFrom(commandStart int64) []string {
 		lines = lines[len(lines)-maxTailLines:]
 	}
 	return lines
+}
+
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	b.written += int64(n)
+	if n >= maxTailBytes {
+		b.data = append(b.data[:0], p[n-maxTailBytes:]...)
+		return n, nil
+	}
+	b.data = append(b.data, p...)
+	if excess := len(b.data) - maxTailBytes; excess > 0 {
+		copy(b.data, b.data[excess:])
+		b.data = b.data[:len(b.data)-excess]
+	}
+	return n, nil
+}
+
+func (b *tailBuffer) from(start int64) ([]byte, bool) {
+	availableStart := b.written - int64(len(b.data))
+	effectiveStart := min(max(start, availableStart), b.written)
+	offset := effectiveStart - availableStart
+	return append([]byte(nil), b.data[offset:]...), effectiveStart > start
 }
 
 func sanitizeTerminal(s string) string {

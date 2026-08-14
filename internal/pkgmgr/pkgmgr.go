@@ -12,6 +12,7 @@ type UpdateOptions struct {
 	SkipAUR   bool
 	SkipCache bool
 	AssumeYes bool
+	Log       bool
 }
 
 type CleanOptions struct {

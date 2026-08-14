@@ -59,6 +59,7 @@ func TestRunWithDeps_yayPathAndPaccache(t *testing.T) {
 	require.Contains(t, calls, []string{"sudo", "paccache", "-rv"})
 	require.Contains(t, out.String(), "captured warning")
 	require.NotContains(t, out.String(), "noisy build output")
+	require.Contains(t, out.String(), "yay review prompts follow; build details stay in the log")
 }
 
 func TestRunWithDeps_aurReviewCommitsOnYaySuccess(t *testing.T) {

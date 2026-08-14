@@ -12,6 +12,7 @@ type Options struct {
 	SkipAUR   bool
 	SkipCache bool
 	AssumeYes bool
+	Log       bool
 }
 
 // Run updates the system using [DefaultDeps].

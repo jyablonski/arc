@@ -40,11 +40,12 @@ func TestUpdateSystemCmd_threadsFlagsToManager(t *testing.T) {
 	updateNoAUR = true
 	updateNoCache = true
 	updateYes = true
-	t.Cleanup(func() { updateNoAUR = false; updateNoCache = false; updateYes = false })
+	updateLog = true
+	t.Cleanup(func() { updateNoAUR = false; updateNoCache = false; updateYes = false; updateLog = false })
 
 	require.NoError(t, updateSystemCmd.RunE(updateSystemCmd, []string{}))
 	require.Len(t, mgr.UpdateSystemCalls(), 1)
-	assert.Equal(t, pkgmgr.UpdateOptions{SkipAUR: true, SkipCache: true, AssumeYes: true}, got)
+	assert.Equal(t, pkgmgr.UpdateOptions{SkipAUR: true, SkipCache: true, AssumeYes: true, Log: true}, got)
 }
 
 func TestUpdateSystemCmd_surfacesError(t *testing.T) {
@@ -94,5 +95,26 @@ func TestUpdateSystemCmd_darwinYesRejectedBeforeManager(t *testing.T) {
 
 	err := updateSystemCmd.RunE(updateSystemCmd, []string{})
 	require.ErrorIs(t, err, arcerrs.ErrAssumeYesLinuxOnly)
+	require.Empty(t, mgr.UpdateSystemCalls(), "manager must not be called when the guard rejects")
+}
+
+func TestUpdateSystemCmd_darwinLogRejectedBeforeManager(t *testing.T) {
+	mgr := &pkgmgr.ManagerMock{
+		UpdateSystemFunc: func(opts pkgmgr.UpdateOptions) error { return nil },
+	}
+	defer setAppForTest(&App{Platform: platform.Darwin, PkgMgr: mgr})()
+
+	flag := updateSystemCmd.Flags().Lookup("log")
+	oldChanged := flag.Changed
+	oldLog := updateLog
+	flag.Changed = true
+	updateLog = true
+	t.Cleanup(func() {
+		flag.Changed = oldChanged
+		updateLog = oldLog
+	})
+
+	err := updateSystemCmd.RunE(updateSystemCmd, []string{})
+	require.ErrorIs(t, err, arcerrs.ErrUpdateLogLinuxOnly)
 	require.Empty(t, mgr.UpdateSystemCalls(), "manager must not be called when the guard rejects")
 }

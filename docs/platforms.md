@@ -80,7 +80,7 @@ Some output is intentionally platform-specific. For example, `arc packages` repo
 
 - **Repository updates** — `arc update system` shows pacman's resolved transaction, asks for approval, rechecks the plan, and verifies the installed versions. Use `--yes` to skip only this approval prompt.
 - **AUR updates** — arc highlights pending versions, ignored packages, maintainer changes, suspicious build-script changes, and other takeover signals. Yay still owns dependency resolution, diffs, editing, and builds; arc shows its interactive gates and important warnings while folding routine build output into transient progress.
-- **Trust and logs** — reviewed AUR snapshots are trusted only after the installed state matches the reviewed plan. Complete raw command output is stored privately under `$XDG_STATE_HOME/arc/update-logs/` or `~/.local/state/arc/update-logs/`; failures include a sanitized tail. Set `ARC_UPDATE_LOG_DIR` to use another location.
+- **Trust and logs** — reviewed AUR snapshots are trusted only after the installed state matches the reviewed plan. Failures include a sanitized in-memory subprocess tail without creating a file. Use `--log` to save complete raw output privately under `$XDG_STATE_HOME/arc/update-logs/` or `~/.local/state/arc/update-logs/`; `ARC_UPDATE_LOG_DIR` overrides that location.
 - See [Reviewing AUR diffs](aur_review.md) for the review workflow and warning signs.
 - `arc clean` clears the pacman cache, orphaned packages, and Arc update logs. Use `--logs-only` to remove only the logs.
 - `arc packages` and `arc installed` read pacman package metadata.

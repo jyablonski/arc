@@ -22,9 +22,13 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 	started := d.Now()
 	renderer := Renderer{Out: d.Out}
 	renderer.RunHeader(started)
-	log, err := d.NewLog(started)
-	if err != nil {
-		return err
+	log := newMemoryRunLog()
+	if opts.Log {
+		persistentLog, err := d.NewLog(started)
+		if err != nil {
+			return err
+		}
+		log = persistentLog
 	}
 	defer func() { runErr = closeRunLog(log, runErr) }()
 	log.note("arc update system started")
@@ -32,14 +36,14 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 
 	renderer.Section("SYNC", "")
 	authLogStart := log.command("sudo", "-v")
-	if err := d.RunLogged(log.file, true, "sudo", "-v"); err != nil {
+	if err := d.RunLogged(log.Writer(), true, "sudo", "-v"); err != nil {
 		return renderRunFailure(renderer, log, authLogStart, "sudo authentication failed", err)
 	}
 	versionsBeforeKeyring, versionErr := d.InstalledVersions()
 	syncStarted := d.Now()
 	keyringArgs := []string{"pacman", "-Sy", "--needed", "--noconfirm", "--noprogressbar", "--color", "never", "archlinux-keyring"}
 	keyringLogStart := log.command("sudo", keyringArgs...)
-	if err := d.RunLogged(log.file, false, "sudo", keyringArgs...); err != nil {
+	if err := d.RunLogged(log.Writer(), false, "sudo", keyringArgs...); err != nil {
 		return renderRunFailure(renderer, log, keyringLogStart, "keyring update failed", err)
 	}
 	renderer.ResetLine()
@@ -91,10 +95,10 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 			// rejected at the diffmenu stays flagged on the next run.
 			result, runYay := runAURReview(d, renderer)
 			if runYay {
-				renderer.Info("interactive yay review and approval prompts follow; build details stay in the log")
+				renderer.Info("yay review prompts follow; build details stay in the log")
 				yayArgs := []string{"-Syu", "--aur", "--diffmenu", "--editmenu", "--noanswerdiff", "--noansweredit"}
 				yayLogStart := log.command("yay", yayArgs...)
-				yayOutput := newAUROutput(log.file, renderer)
+				yayOutput := newAUROutput(log.Writer(), renderer)
 				err := d.RunLogged(yayOutput, false, "yay", yayArgs...)
 				yayOutput.Finish()
 				if err != nil {
@@ -114,13 +118,13 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 		renderer.Blank()
 		cacheStarted := d.Now()
 		cacheAuthLogStart := log.command("sudo", "-v")
-		if err := d.RunLogged(log.file, true, "sudo", "-v"); err != nil {
+		if err := d.RunLogged(log.Writer(), true, "sudo", "-v"); err != nil {
 			renderer.Warning(fmt.Sprintf("package cache authentication failed: %v", err))
 			renderer.FailureTail(log.tailFrom(cacheAuthLogStart))
 		} else {
 			cacheLogStart := log.command("sudo", "paccache", "-rv")
 			stopProgress := renderer.Progress("cleaning package cache…")
-			err := d.RunLogged(log.file, false, "sudo", "paccache", "-rv")
+			err := d.RunLogged(log.Writer(), false, "sudo", "paccache", "-rv")
 			stopProgress()
 			if err != nil {
 				renderer.Warning(fmt.Sprintf("paccache failed: %v", err))

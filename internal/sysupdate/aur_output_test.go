@@ -77,10 +77,32 @@ func TestAUROutput_reducesCapturedYayChatter(t *testing.T) {
 
 	for _, noise := range []string{
 		"% Total % Received", "659.5k", "steam.tar.gz ... Passed", "running egg_info",
-		"copying hundreds", "55 passed", "python-steam downloading", "checking package integrity",
+		"copying hundreds", "55 passed", "python-steam downloading", "checking keyring",
+		"checking package integrity", "loading package files", "checking for file conflicts",
+		"checking available disk space",
 	} {
 		require.NotContains(t, output, noise)
 	}
+}
+
+func TestAUROutput_newlineTerminatedApprovalEndsInstallPlan(t *testing.T) {
+	var log bytes.Buffer
+	var terminal bytes.Buffer
+	reduced := newAUROutput(&log, Renderer{Out: &terminal})
+	raw := "Packages (1) cursor-bin-3.16.17-1\n" +
+		"Total Installed Size: 545.19 MiB\n" +
+		":: Proceed with installation? [Y/n]\n" +
+		"checking keyring...\n" +
+		"checking package integrity...\n"
+	_, err := io.WriteString(reduced, raw)
+	require.NoError(t, err)
+	reduced.Finish()
+
+	require.Equal(t, raw, log.String())
+	require.Contains(t, terminal.String(), "Packages (1) cursor-bin-3.16.17-1")
+	require.Contains(t, terminal.String(), "Proceed with installation? [Y/n]")
+	require.NotContains(t, terminal.String(), "checking keyring")
+	require.NotContains(t, terminal.String(), "checking package integrity")
 }
 
 func TestAUROutput_promotesErrors(t *testing.T) {

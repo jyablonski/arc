@@ -148,6 +148,9 @@ func (r Renderer) PackageResult(change PackageChange) {
 }
 
 func (r Renderer) LogPath(path string) {
+	if path == "" {
+		return
+	}
 	_, _ = fmt.Fprintf(r.writer(), "\n  log %s\n", path)
 }
 

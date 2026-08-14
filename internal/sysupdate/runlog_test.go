@@ -2,6 +2,7 @@ package sysupdate
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,6 +138,18 @@ func TestRunLogTailFrom_excludesEarlierCommands(t *testing.T) {
 
 	tail := log.tailFrom(start)
 	require.Equal(t, []string{"relevant failure"}, tail)
+}
+
+func TestMemoryRunLogTailFrom_isBoundedAndCommandScoped(t *testing.T) {
+	log := newMemoryRunLog()
+	log.note("successful earlier command output")
+	start := log.command("failing-command")
+	_, err := io.WriteString(log.Writer(), strings.Repeat("x", maxTailBytes)+"\nrelevant failure\n")
+	require.NoError(t, err)
+
+	tail := log.tailFrom(start)
+	require.Equal(t, []string{"relevant failure"}, tail)
+	require.Empty(t, log.path)
 }
 
 func TestNewRunLog_creationFailure(t *testing.T) {

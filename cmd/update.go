@@ -17,6 +17,7 @@ var (
 	updateNoAUR   bool
 	updateNoCache bool
 	updateYes     bool
+	updateLog     bool
 )
 
 var updateCmd = &cobra.Command{
@@ -48,9 +49,9 @@ var updateSystemCmd = &cobra.Command{
 transaction, verifies installed versions, optionally runs yay -Syu --aur with its
 native diff and PKGBUILD review prompts, and optionally cleans the package cache.
 Before yay runs, arc triages pending AUR updates for takeover signals and scans
-changed package files for high-signal patterns. Private raw logs use Arc's state
-directory, normally ~/.local/state/arc/update-logs. macOS runs brew update,
-brew upgrade, and optional brew cleanup.`,
+changed package files for high-signal patterns. Use --log to save complete raw
+output under Arc's state directory. macOS runs brew update, brew upgrade, and
+optional brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {
 			return arcerrs.ErrNoAURLinuxOnly
@@ -58,10 +59,14 @@ brew upgrade, and optional brew cleanup.`,
 		if cmd.Flags().Changed("yes") && app.Platform != platform.Linux {
 			return arcerrs.ErrAssumeYesLinuxOnly
 		}
+		if cmd.Flags().Changed("log") && app.Platform != platform.Linux {
+			return arcerrs.ErrUpdateLogLinuxOnly
+		}
 		return app.PkgMgr.UpdateSystem(pkgmgr.UpdateOptions{
 			SkipAUR:   updateNoAUR,
 			SkipCache: updateNoCache,
 			AssumeYes: updateYes,
+			Log:       updateLog,
 		})
 	},
 }
@@ -91,4 +96,5 @@ func init() {
 	updateSystemCmd.Flags().BoolVar(&updateNoAUR, "no-aur", false, "Skip AUR updates on Linux")
 	updateSystemCmd.Flags().BoolVar(&updateNoCache, "no-cache", false, "Skip cache cleanup")
 	updateSystemCmd.Flags().BoolVarP(&updateYes, "yes", "y", false, "Approve the displayed Linux repository transaction without prompting")
+	updateSystemCmd.Flags().BoolVar(&updateLog, "log", false, "Save complete Linux subprocess output to a private update log")
 }
