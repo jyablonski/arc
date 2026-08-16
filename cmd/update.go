@@ -16,6 +16,8 @@ import (
 var (
 	updateNoAUR   bool
 	updateNoCache bool
+	updateYes     bool
+	updateLog     bool
 )
 
 var updateCmd = &cobra.Command{
@@ -43,20 +45,28 @@ var updateSelfCmd = &cobra.Command{
 var updateSystemCmd = &cobra.Command{
 	Use:   "system",
 	Short: "Run system package updates",
-	Long: `Update the system packages. Linux runs pacman -Syu, optionally yay -Syu --aur,
-and optional paccache cleanup. AUR updates are interactive and force yay's diff
-and PKGBUILD review prompts; before yay runs, arc triages pending AUR updates
-for takeover signals (maintainer changes, orphan adoptions, AUR deletions) and
-scans changed package files for high-signal patterns, flagging only what's new
-since the last trusted run. macOS runs brew update, brew upgrade, and optional
-brew cleanup.`,
+	Long: `Update the system packages. On Linux, arc renders and gates the resolved pacman
+transaction, verifies installed versions, optionally runs yay -Syu --aur with its
+native diff and PKGBUILD review prompts, and optionally cleans the package cache.
+Before yay runs, arc triages pending AUR updates for takeover signals and scans
+changed package files for high-signal patterns. Use --log to save complete raw
+output under Arc's state directory. macOS runs brew update, brew upgrade, and
+optional brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {
 			return arcerrs.ErrNoAURLinuxOnly
 		}
+		if cmd.Flags().Changed("yes") && app.Platform != platform.Linux {
+			return arcerrs.ErrAssumeYesLinuxOnly
+		}
+		if cmd.Flags().Changed("log") && app.Platform != platform.Linux {
+			return arcerrs.ErrUpdateLogLinuxOnly
+		}
 		return app.PkgMgr.UpdateSystem(pkgmgr.UpdateOptions{
 			SkipAUR:   updateNoAUR,
 			SkipCache: updateNoCache,
+			AssumeYes: updateYes,
+			Log:       updateLog,
 		})
 	},
 }
@@ -85,4 +95,6 @@ func init() {
 	updateCmd.AddCommand(updateSelfCmd, updateSystemCmd, updateUvCmd)
 	updateSystemCmd.Flags().BoolVar(&updateNoAUR, "no-aur", false, "Skip AUR updates on Linux")
 	updateSystemCmd.Flags().BoolVar(&updateNoCache, "no-cache", false, "Skip cache cleanup")
+	updateSystemCmd.Flags().BoolVarP(&updateYes, "yes", "y", false, "Approve the displayed Linux repository transaction without prompting")
+	updateSystemCmd.Flags().BoolVar(&updateLog, "log", false, "Save complete Linux subprocess output to a private update log")
 }

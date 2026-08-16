@@ -104,6 +104,13 @@ func TestPrint(t *testing.T) {
 	})
 }
 
+func TestBytes(t *testing.T) {
+	require.Equal(t, "0 B", Bytes(0))
+	require.Equal(t, "1.5 KiB", Bytes(1536))
+	require.Equal(t, "2.0 MiB", Bytes(2*1024*1024))
+	require.Equal(t, "1.0 GiB", Bytes(1024*1024*1024))
+}
+
 func TestTable(t *testing.T) {
 	t.Run("When called with headers and rows, it outputs formatted table", func(t *testing.T) {
 		headers := []string{"Name", "Size"}

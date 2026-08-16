@@ -14,10 +14,9 @@
 // not "reject".
 //
 // Review computes findings without touching the baseline; Commit persists the
-// observed maintainers/versions plus the file snapshots and is meant to run
-// only after yay actually applied the updates. That ordering matters:
-// committing before you review would let a takeover silently rewrite the
-// "known good" maintainer and file contents, so it would never flag again.
+// observed maintainers/versions plus the file snapshots after the planned
+// updates are installed or the review confirms that none are pending. That
+// ordering keeps a declined or unsuccessful update from advancing trust.
 package aurreview
 
 import (
@@ -44,6 +43,7 @@ import (
 	"time"
 
 	"github.com/jyablonski/arc/internal/boundary"
+	"github.com/jyablonski/arc/internal/statepath"
 )
 
 const (
@@ -158,14 +158,11 @@ func saveState(path string, data map[string]provenance) error {
 // DefaultStatePath returns the baseline location, honoring XDG_STATE_HOME and
 // falling back to ~/.local/state.
 func DefaultStatePath() (string, error) {
-	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "arc", "aur-provenance.json"), nil
-	}
-	home, err := os.UserHomeDir()
+	dir, err := statepath.ArcDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "state", "arc", "aur-provenance.json"), nil
+	return filepath.Join(dir, "aur-provenance.json"), nil
 }
 
 // ---- Reviewer ----
@@ -190,15 +187,23 @@ func New(statePath string) *Reviewer {
 	}
 }
 
-// Result carries the findings plus the baseline that Commit should persist if
-// the run is trusted (yay actually applied the updates). Pending is the count
-// of packages whose installed version differs from the AUR's (i.e. real
-// upgrades), so callers can stay quiet when there's nothing to upgrade.
+// Result carries the findings, pending updates, and baseline that Commit should
+// persist after the reviewed installed state is trusted.
 type Result struct {
 	Findings []Finding
-	Pending  int
+	Updates  []Update
 	baseline map[string]provenance
 	files    map[string]map[string]string // pkgbase -> filename -> content, for the snapshot cache
+}
+
+// Update is an AUR package version change observed by Review. PackageBase is
+// included because split packages share one reviewed source tree.
+type Update struct {
+	Name             string
+	PackageBase      string
+	InstalledVersion string
+	TargetVersion    string
+	LastModified     int64
 }
 
 // Review takes installed AUR packages (name -> installed version, from
@@ -227,7 +232,7 @@ func (r *Reviewer) Review(ctx context.Context, installed map[string]string) (*Re
 	maps.Copy(baseline, st.data)
 
 	var findings []Finding
-	pending := 0
+	var updates []Update
 	// Track maintainers that are NEW vs baseline this run -> cluster signal.
 	newMaintainerHits := map[string][]string{}
 
@@ -266,7 +271,13 @@ func (r *Reviewer) Review(ctx context.Context, installed map[string]string) (*Re
 		// maintainerChanged, which deliberately ignores an empty previous value.
 		adopted := known && prev.Maintainer == "" && cur != ""
 		if pendingUpdate {
-			pending++
+			updates = append(updates, Update{
+				Name:             info.Name,
+				PackageBase:      info.PackageBase,
+				InstalledVersion: installed[info.Name],
+				TargetVersion:    info.Version,
+				LastModified:     info.LastModified,
+			})
 		}
 
 		// (1) Provenance: maintainer change is the strongest takeover tell.
@@ -350,11 +361,13 @@ func (r *Reviewer) Review(ctx context.Context, installed map[string]string) (*Re
 	sort.SliceStable(findings, func(i, j int) bool {
 		return findings[i].Severity > findings[j].Severity
 	})
-	return &Result{Findings: findings, Pending: pending, baseline: baseline, files: files}, nil
+	sort.Slice(updates, func(i, j int) bool { return updates[i].Name < updates[j].Name })
+	return &Result{Findings: findings, Updates: updates, baseline: baseline, files: files}, nil
 }
 
 // Commit persists the baseline and file snapshots observed during Review. Run
-// it only after a trusted run so a rejected takeover stays flagged next time.
+// it only after the reviewed installed state is trusted so a rejected update
+// stays flagged next time.
 func (r *Reviewer) Commit(res *Result) error {
 	if res == nil {
 		return nil

@@ -3,7 +3,7 @@ package sysupdate
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/jyablonski/arc/internal/output"
 )
@@ -11,6 +11,8 @@ import (
 type Options struct {
 	SkipAUR   bool
 	SkipCache bool
+	AssumeYes bool
+	Log       bool
 }
 
 // Run updates the system using [DefaultDeps].
@@ -19,7 +21,7 @@ func Run(opts Options) error {
 }
 
 // promptReboot asks whether to reboot after a kernel update.
-func promptReboot(stdin *os.File, runInteractive func(name string, args ...string) error) error {
+func promptReboot(stdin io.Reader, runInteractive func(name string, args ...string) error) error {
 	output.Warning("A kernel update was successfully installed. A reboot is required for the changes to take effect.")
 	fmt.Print("Reboot now? [Y/n]: ")
 

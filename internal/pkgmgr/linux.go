@@ -28,6 +28,8 @@ func (linuxManager) UpdateSystem(opts UpdateOptions) error {
 	return sysupdate.Run(sysupdate.Options{
 		SkipAUR:   opts.SkipAUR,
 		SkipCache: opts.SkipCache,
+		AssumeYes: opts.AssumeYes,
+		Log:       opts.Log,
 	})
 }
 

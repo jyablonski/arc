@@ -175,6 +175,13 @@ func TestReview_firstRun_noMaintainerFindingsButScansUpdate(t *testing.T) {
 	require.False(t, findingFor(res.Findings, "foo", aurreview.High, "maintainer changed"))
 	// The pending update was scanned and the npm fetch surfaced.
 	require.True(t, findingFor(res.Findings, "foo", aurreview.High, "node-ecosystem fetch"))
+	require.Equal(t, []aurreview.Update{{
+		Name:             "foo",
+		PackageBase:      "foo",
+		InstalledVersion: "1.0",
+		TargetVersion:    "2.0",
+		LastModified:     10,
+	}}, res.Updates)
 
 	// Review must NOT write the baseline.
 	_, statErr := os.Stat(statePath)
@@ -356,7 +363,7 @@ func TestReview_skipScanAggregatesAndIgnoresComments(t *testing.T) {
 	require.Len(t, skip, 1)
 	require.Contains(t, skip[0].Message, "3 line(s)")
 	require.Equal(t, "PKGBUILD:2,5,6", skip[0].Location)
-	require.Equal(t, 1, res.Pending)
+	require.Len(t, res.Updates, 1)
 }
 
 func TestReview_diffScanOnlyFlagsNewLines(t *testing.T) {

@@ -78,10 +78,11 @@ Some output is intentionally platform-specific. For example, `arc packages` repo
 
 ## Arch Linux Behavior
 
-On Arch Linux:
-
-- `arc update system` runs the pacman/yay update workflow. The yay AUR step is interactive and forces diff and PKGBUILD review prompts before building. Before yay runs, arc triages pending AUR updates against the AUR RPC: it flags maintainer changes, orphan adoptions, packages deleted from the AUR, orphaned packages, and clusters of packages taken over by one account (provenance baseline kept at `~/.local/state/arc/aur-provenance.json`). For packages that changed since the last trusted run, it fetches the full cgit snapshot (PKGBUILD, `.install`, hooks, patches, local scripts) and greps for high-signal patterns — second-stage fetches, pipe-to-shell, install hooks, setuid bits, obfuscation — plus URL host drift in the PKGBUILD. Snapshots are cached under `~/.local/state/arc/aur-files/` after a successful run, so later scans flag only lines that are new since the last vetted snapshot (lockfile-pinned fetches are downgraded). Packages in `IgnorePkg` are skipped (arc won't review what yay won't upgrade), and it stays quiet when nothing is pending. It only surfaces findings — you still decide at the diffmenu; see [AUR review](aur_review.md) for how to read those diffs.
-- `arc clean` uses pacman cache and orphan cleanup.
+- **Repository updates** — `arc update system` shows pacman's resolved transaction, asks for approval, rechecks the plan, and verifies the installed versions. Use `--yes` to skip only this approval prompt.
+- **AUR updates** — arc highlights pending versions, ignored packages, maintainer changes, suspicious build-script changes, and other takeover signals. Yay still owns dependency resolution, diffs, editing, and builds; arc shows its interactive gates and important warnings while folding routine build output into transient progress.
+- **Trust and logs** — reviewed AUR snapshots are trusted only after the installed state matches the reviewed plan. Failures include a sanitized in-memory subprocess tail without creating a file. Use `--log` to save complete raw output privately under `$XDG_STATE_HOME/arc/update-logs/` or `~/.local/state/arc/update-logs/`; `ARC_UPDATE_LOG_DIR` overrides that location.
+- See [Reviewing AUR diffs](aur_review.md) for the review workflow and warning signs.
+- `arc clean` clears the pacman cache, orphaned packages, and Arc update logs. Use `--logs-only` to remove only the logs.
 - `arc packages` and `arc installed` read pacman package metadata.
 - `arc sleep` uses systemd.
 - `arc parts` uses tools like `dmidecode`, `lspci`, `lshw`, and `nvidia-smi`.
@@ -94,7 +95,7 @@ Arch-only flags such as `--aur-only` and `--no-aur` are valid on Arch Linux.
 On macOS:
 
 - `arc update system` runs `brew update`, `brew upgrade`, and optional `brew cleanup`.
-- `arc clean` uses `brew cleanup` and `brew autoremove`.
+- `arc clean` runs `brew cleanup`, `brew autoremove`, and clears Arc update logs. Use `--logs-only` to remove only the logs.
 - `arc packages` and `arc installed` read Homebrew formula and cask metadata.
 - `arc sleep` uses `pmset sleepnow`.
 - `arc parts` uses `system_profiler` and `sysctl`.

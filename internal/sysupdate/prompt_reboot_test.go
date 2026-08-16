@@ -1,8 +1,10 @@
 package sysupdate
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -49,4 +51,25 @@ func TestPromptReboot_runsRebootWhenYes(t *testing.T) {
 
 	require.NoError(t, promptReboot(f, runInteractive))
 	require.True(t, saw)
+}
+
+func TestPromptReboot_readError(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	t.Cleanup(func() { _ = r.Close() })
+
+	err = promptReboot(r, func(string, ...string) error { return nil })
+	require.Error(t, err)
+	require.Contains(t, strings.ToLower(err.Error()), "read")
+}
+
+func TestPromptReboot_sudoRebootFails(t *testing.T) {
+	f := stdinWith(t, "y\n")
+
+	err := promptReboot(f, func(string, ...string) error {
+		return errors.New("permission denied")
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to reboot")
 }

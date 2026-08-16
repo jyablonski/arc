@@ -56,6 +56,25 @@ func Warning(s string) {
 	_, _ = warningColor.Printf("⚠ %s\n", s)
 }
 
+// Bytes formats a byte count using binary units.
+func Bytes(n int64) string {
+	const (
+		kib = 1024
+		mib = 1024 * kib
+		gib = 1024 * mib
+	)
+	switch {
+	case n >= gib:
+		return fmt.Sprintf("%.1f GiB", float64(n)/gib)
+	case n >= mib:
+		return fmt.Sprintf("%.1f MiB", float64(n)/mib)
+	case n >= kib:
+		return fmt.Sprintf("%.1f KiB", float64(n)/kib)
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
+}
+
 func Print(s string) {
 	fmt.Println(s)
 }

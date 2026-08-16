@@ -11,6 +11,8 @@ var ErrUnsupportedPlatform = errors.New("package management is not supported on 
 type UpdateOptions struct {
 	SkipAUR   bool
 	SkipCache bool
+	AssumeYes bool
+	Log       bool
 }
 
 type CleanOptions struct {
