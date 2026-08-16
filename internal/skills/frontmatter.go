@@ -18,8 +18,9 @@ const MaxDescriptionLen = 1024
 var nameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 type Frontmatter struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	Name                   string `yaml:"name"`
+	Description            string `yaml:"description"`
+	DisableModelInvocation *bool  `yaml:"disable-model-invocation" json:"DisableModelInvocation,omitempty"`
 }
 
 var ErrNoFrontmatter = errors.New("no YAML frontmatter block found")

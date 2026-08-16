@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jyablonski/arc/internal/filemode"
@@ -102,13 +103,20 @@ func TestSkillsSyncCmdSuccess(t *testing.T) {
 	root := setupSkillsEnv(t)
 	defer resetSkillsFlags()
 	writeFile(t, filepath.Join(root, "ai", "skills", "foo", "SKILL.md"),
-		"---\nname: foo\ndescription: ok\n---\n")
+		"---\nname: foo\ndescription: ok\ndisable-model-invocation: true\n---\n")
 
 	if err := skillsSyncCmd.RunE(skillsSyncCmd, []string{}); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 	if _, err := os.Lstat(filepath.Join(root, "codex", "skills", "foo")); err != nil {
 		t.Errorf("codex symlink missing: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "ai", "skills", "foo", "agents", "openai.yaml"))
+	if err != nil {
+		t.Fatalf("Codex metadata missing: %v", err)
+	}
+	if !strings.Contains(string(data), "allow_implicit_invocation: false") {
+		t.Errorf("unexpected Codex metadata: %s", data)
 	}
 }
 

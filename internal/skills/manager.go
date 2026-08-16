@@ -279,9 +279,10 @@ func (m *Manager) moveOrCopy(src, dst string) error {
 }
 
 type SyncResult struct {
-	Linked    int
-	Pruned    int
-	Conflicts int
+	Linked          int
+	MetadataUpdated int
+	Pruned          int
+	Conflicts       int
 }
 
 func (m *Manager) Sync() (SyncResult, error) {
@@ -297,6 +298,16 @@ func (m *Manager) Sync() (SyncResult, error) {
 	}
 	for _, name := range canonicalNames {
 		canonical := filepath.Join(m.paths.SkillsRoot, name)
+		fm, parseErr := Parse(filepath.Join(canonical, SkillFilename))
+		if parseErr != nil {
+			output.Warning(fmt.Sprintf("Codex metadata conflict for %s: %v", name, parseErr))
+			res.Conflicts++
+		} else if updated, metadataErr := m.syncOpenAIMetadata(canonical, fm); metadataErr != nil {
+			output.Warning(fmt.Sprintf("Codex metadata conflict for %s: %v", name, metadataErr))
+			res.Conflicts++
+		} else if updated {
+			res.MetadataUpdated++
+		}
 		for _, p := range m.providers {
 			slot := filepath.Join(p.SkillsDir, name)
 			info, lerr := os.Lstat(slot)

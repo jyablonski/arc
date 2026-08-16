@@ -12,7 +12,7 @@ Under the hood it wraps the native tools each platform already ships (pacman/yay
 
 - System maintenance: one-shot system updates, cache and orphan cleanup, package statistics, hardware and system inspection, and dependency validation, each dispatching to the right package manager for the host.
 - AI coding-tool observability: live subscription/quota usage across Claude, Codex, and Cursor (`ai usage`), plus historical local token consumption with an API-equivalent cost estimate mined from on-disk session logs (`ai tokens`).
-- Shared AI configuration: a canonical store for AI skills, `AGENTS.md` rules, and MCP servers, kept in sync across Claude, Codex, Cursor, and opencode (`skills`, `rules`, `mcp`).
+- Shared AI configuration: a canonical store for AI skills, `AGENTS.md` rules, and MCP config, kept in sync across Claude, Codex, Cursor, and opencode (`skills`, `rules`, `mcp`).
 - Self-management: self-update from GitHub releases, one-command dependency setup, and local-only usage stats for `arc` itself.
 
 Instead of remembering scattered commands or maintaining shell aliases:
@@ -108,7 +108,7 @@ arc update self
 | `ai pricing`  | Refresh the local model pricing cache used by `ai tokens`  | `arc ai pricing`  |
 | `skills`      | Sync shared AI/LLM skills across providers                 | `arc skills sync` |
 | `rules`       | Sync the shared `AGENTS.md` rules file across providers    | `arc rules sync`  |
-| `mcp`         | Sync shared MCP servers across providers                   | `arc mcp sync`    |
+| `mcp`         | Sync shared MCP config across providers                    | `arc mcp sync`    |
 
 ### arc itself
 
@@ -131,7 +131,7 @@ More detailed notes are available in `docs/`:
 - [AI pricing](docs/ai_pricing.md)
 - [Shared skills](docs/skills.md)
 - [Shared rules](docs/rules.md)
-- [Shared MCP servers](docs/mcp.md)
+- [Shared MCP config](docs/mcp.md)
 
 ## Development
 

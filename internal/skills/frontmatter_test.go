@@ -11,12 +11,13 @@ import (
 
 func TestParse(t *testing.T) {
 	tests := []struct {
-		name     string
-		filename string
-		body     string
-		wantErr  string
-		wantName string
-		wantDesc string
+		name        string
+		filename    string
+		body        string
+		wantErr     string
+		wantName    string
+		wantDesc    string
+		wantDisable *bool
 	}{
 		{
 			name:     "valid frontmatter",
@@ -31,6 +32,14 @@ func TestParse(t *testing.T) {
 			body:     "---\nname: foo\ndescription: x\nuser_invocable: true\n---\n",
 			wantName: "foo",
 			wantDesc: "x",
+		},
+		{
+			name:        "disable model invocation",
+			filename:    "SKILL.md",
+			body:        "---\nname: foo\ndescription: x\ndisable-model-invocation: true\n---\n",
+			wantName:    "foo",
+			wantDesc:    "x",
+			wantDisable: testBoolPointer(true),
 		},
 		{
 			name:     "leading BOM tolerated",
@@ -90,8 +99,19 @@ func TestParse(t *testing.T) {
 			if tt.wantDesc != "" && fm.Description != tt.wantDesc {
 				t.Errorf("description: got %q, want %q", fm.Description, tt.wantDesc)
 			}
+			if tt.wantDisable == nil {
+				if fm.DisableModelInvocation != nil {
+					t.Errorf("disable-model-invocation: got %v, want absent", *fm.DisableModelInvocation)
+				}
+			} else if fm.DisableModelInvocation == nil || *fm.DisableModelInvocation != *tt.wantDisable {
+				t.Errorf("disable-model-invocation: got %v, want %v", fm.DisableModelInvocation, *tt.wantDisable)
+			}
 		})
 	}
+}
+
+func testBoolPointer(value bool) *bool {
+	return &value
 }
 
 func TestValidate(t *testing.T) {
