@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jyablonski/arc/internal/filemode"
+	"gopkg.in/yaml.v3"
 )
 
 func newTestManager(t *testing.T, dryRun bool) (*Manager, Paths, []Provider) {
@@ -42,6 +43,17 @@ func writeSkill(t *testing.T, dir, name, description string) {
 	}
 	body := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nbody\n", name, description)
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), filemode.File); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeSkillWithFields(t *testing.T, dir, name, description, fields string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, filemode.Dir); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf("---\nname: %s\ndescription: %s\n%s---\n\nbody\n", name, description, fields)
+	if err := os.WriteFile(filepath.Join(dir, SkillFilename), []byte(body), filemode.File); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -407,6 +419,203 @@ func TestSync_ForwardLinksCanonicalToMissingProviders(t *testing.T) {
 		if !isSymlink(t, filepath.Join(p.SkillsDir, "foo")) {
 			t.Errorf("%s: missing symlink", p.Name)
 		}
+	}
+}
+
+func TestSync_CreatesCodexInvocationPolicy(t *testing.T) {
+	m, paths, providers := newTestManager(t, false)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkillWithFields(t, canonical, "foo", "x", "disable-model-invocation: true\nuser-invocable: true\n")
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.MetadataUpdated != 1 {
+		t.Fatalf("MetadataUpdated: got %d, want 1", res.MetadataUpdated)
+	}
+	metadataPath := filepath.Join(canonical, "agents", "openai.yaml")
+	assertImplicitInvocation(t, metadataPath, false)
+	assertImplicitInvocation(t, filepath.Join(providers[1].SkillsDir, "foo", "agents", "openai.yaml"), false)
+
+	res, err = m.Sync()
+	if err != nil {
+		t.Fatalf("second Sync: %v", err)
+	}
+	if res.MetadataUpdated != 0 {
+		t.Errorf("second MetadataUpdated: got %d, want 0", res.MetadataUpdated)
+	}
+}
+
+func TestSync_PreservesExistingOpenAIMetadata(t *testing.T) {
+	m, paths, _ := newTestManager(t, false)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkillWithFields(t, canonical, "foo", "x", "disable-model-invocation: true\n")
+	metadataPath := filepath.Join(canonical, "agents", "openai.yaml")
+	metadata := "# keep this comment\ninterface:\n  display_name: Foo\npolicy:\n  custom: keep\ndependencies:\n  tools: []\n"
+	if err := os.MkdirAll(filepath.Dir(metadataPath), filemode.Dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(metadataPath, []byte(metadata), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.MetadataUpdated != 1 || res.Conflicts != 0 {
+		t.Fatalf("unexpected Sync result: %+v", res)
+	}
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# keep this comment", "display_name: Foo", "custom: keep", "tools: []"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("metadata lost %q:\n%s", want, data)
+		}
+	}
+	info, err := os.Stat(metadataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("metadata mode: got %o, want 600", info.Mode().Perm())
+	}
+	assertImplicitInvocation(t, metadataPath, false)
+}
+
+func TestSync_ExplicitFalseRestoresImplicitInvocation(t *testing.T) {
+	m, paths, _ := newTestManager(t, false)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkillWithFields(t, canonical, "foo", "x", "disable-model-invocation: false\n")
+	metadataPath := filepath.Join(canonical, "agents", "openai.yaml")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), filemode.Dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(metadataPath, []byte("policy:\n  allow_implicit_invocation: false\n"), filemode.File); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.MetadataUpdated != 1 {
+		t.Fatalf("MetadataUpdated: got %d, want 1", res.MetadataUpdated)
+	}
+	assertImplicitInvocation(t, metadataPath, true)
+}
+
+func TestSync_DoesNotCreateDefaultOpenAIMetadata(t *testing.T) {
+	m, paths, _ := newTestManager(t, false)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkillWithFields(t, canonical, "foo", "x", "disable-model-invocation: false\n")
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.MetadataUpdated != 0 {
+		t.Errorf("MetadataUpdated: got %d, want 0", res.MetadataUpdated)
+	}
+	if _, err := os.Stat(filepath.Join(canonical, "agents", "openai.yaml")); !os.IsNotExist(err) {
+		t.Errorf("default metadata should not be created: %v", err)
+	}
+}
+
+func TestSync_AbsentFrontmatterLeavesOpenAIMetadataUntouched(t *testing.T) {
+	m, paths, _ := newTestManager(t, false)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkill(t, canonical, "foo", "x")
+	metadataPath := filepath.Join(canonical, "agents", "openai.yaml")
+	want := []byte("policy:\n  allow_implicit_invocation: false\n")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), filemode.Dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(metadataPath, want, filemode.File); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.MetadataUpdated != 0 {
+		t.Errorf("MetadataUpdated: got %d, want 0", res.MetadataUpdated)
+	}
+	got, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("metadata changed: got %q, want %q", got, want)
+	}
+}
+
+func TestSync_MalformedOpenAIMetadataIsConflict(t *testing.T) {
+	m, paths, _ := newTestManager(t, false)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkillWithFields(t, canonical, "foo", "x", "disable-model-invocation: true\n")
+	metadataPath := filepath.Join(canonical, "agents", "openai.yaml")
+	want := []byte("policy: [unterminated\n")
+	if err := os.MkdirAll(filepath.Dir(metadataPath), filemode.Dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(metadataPath, want, filemode.File); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.Conflicts != 1 || res.MetadataUpdated != 0 {
+		t.Fatalf("unexpected Sync result: %+v", res)
+	}
+	got, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("malformed metadata changed: got %q, want %q", got, want)
+	}
+}
+
+func TestSync_OpenAIMetadataDryRunMakesNoChanges(t *testing.T) {
+	m, paths, _ := newTestManager(t, true)
+	canonical := filepath.Join(paths.SkillsRoot, "foo")
+	writeSkillWithFields(t, canonical, "foo", "x", "disable-model-invocation: true\n")
+
+	res, err := m.Sync()
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.MetadataUpdated != 1 {
+		t.Fatalf("MetadataUpdated: got %d, want 1", res.MetadataUpdated)
+	}
+	if _, err := os.Stat(filepath.Join(canonical, "agents", "openai.yaml")); !os.IsNotExist(err) {
+		t.Errorf("dry-run created metadata: %v", err)
+	}
+}
+
+func assertImplicitInvocation(t *testing.T, path string, want bool) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var metadata struct {
+		Policy struct {
+			AllowImplicitInvocation bool `yaml:"allow_implicit_invocation"`
+		} `yaml:"policy"`
+	}
+	if err := yaml.Unmarshal(data, &metadata); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	if metadata.Policy.AllowImplicitInvocation != want {
+		t.Errorf("allow_implicit_invocation: got %v, want %v", metadata.Policy.AllowImplicitInvocation, want)
 	}
 }
 

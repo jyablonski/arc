@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jyablonski/arc/internal/filemode"
 	"github.com/jyablonski/arc/internal/shell"
 	"golang.org/x/sys/unix"
 )
@@ -97,6 +98,48 @@ func (f *FS) WriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("WriteFile sudo path not supported for %s", path)
 	}
 	return os.WriteFile(path, data, perm)
+}
+
+func (f *FS) WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	if NeedsSudo(path) {
+		return fmt.Errorf("WriteFileAtomic sudo path not supported for %s", path)
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, filemode.Dir); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	if info, err := os.Stat(path); err == nil {
+		perm = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+
+	tmp, err := os.CreateTemp(dir, ".arc-skills-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file in %s: %w", dir, err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write %s: %w", tmpName, err)
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod %s: %w", tmpName, err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync %s: %w", tmpName, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", tmpName, err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("rename %s -> %s: %w", tmpName, path, err)
+	}
+	return nil
 }
 
 func copyTreeNative(src, dst string) error {

@@ -61,7 +61,9 @@ var skillsSyncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Forward-link canonical skills into every provider",
 	Long: `Symlink every canonical skill under ~/ai/skills into every provider and
-prune dangling symlinks. Real files in provider slots are never touched.
+prune dangling symlinks. Frontmatter disable-model-invocation values are also
+translated into Codex agents/openai.yaml policy. Real files in provider slots
+are never touched.
 
 Exits with a non-zero status if any conflict is unresolved.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,8 +73,8 @@ Exits with a non-zero status if any conflict is unresolved.`,
 			return err
 		}
 		output.Header("Sync summary")
-		output.Info(fmt.Sprintf("linked: %d, pruned: %d, conflicts: %d",
-			res.Linked, res.Pruned, res.Conflicts))
+		output.Info(fmt.Sprintf("linked: %d, metadata updated: %d, pruned: %d, conflicts: %d",
+			res.Linked, res.MetadataUpdated, res.Pruned, res.Conflicts))
 		if res.Conflicts > 0 {
 			return ErrSkillsConflict
 		}

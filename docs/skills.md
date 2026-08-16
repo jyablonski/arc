@@ -16,6 +16,10 @@ Each skill lives in its own directory and must include a `SKILL.md` file with YA
 
 Validation is strict. The frontmatter name should match the canonical directory name, and `arc skills validate --fix` can rename directories when the metadata and directory drift.
 
+For Codex, `arc skills sync` translates an explicit `disable-model-invocation` frontmatter value into the native `agents/openai.yaml` policy. `disable-model-invocation: true` writes `policy.allow_implicit_invocation: false`, preventing automatic model invocation while preserving explicit `$skill-name` invocation. Existing OpenAI metadata such as interface settings and dependencies is preserved.
+
+- This is only necessary because OpenAI is on some bullshit and doesn't / won't support the frontmatter field.
+
 ## Commands
 
 Promote a draft directory into the canonical store and link it everywhere:
