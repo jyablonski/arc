@@ -19,6 +19,7 @@ Validation is strict. The frontmatter name should match the canonical directory 
 For Codex, `arc skills sync` translates an explicit `disable-model-invocation` frontmatter value into the native `agents/openai.yaml` policy. `disable-model-invocation: true` writes `policy.allow_implicit_invocation: false`, preventing automatic model invocation while preserving explicit `$skill-name` invocation. Existing OpenAI metadata such as interface settings and dependencies is preserved.
 
 - This is only necessary because OpenAI is on some bullshit and doesn't / won't support the frontmatter field.
+- https://github.com/openai/codex/issues/10585
 
 ## Commands
 
