@@ -73,7 +73,7 @@ func driftCheck(res ListResult) ai.HealthCheck {
 	}
 
 	if len(problems) == 0 {
-		detail := fmt.Sprintf("%d server(s) in sync across providers", len(res.Servers))
+		detail := fmt.Sprintf("%d MCP configuration entries in sync across providers", len(res.Servers))
 		if unsupported > 0 {
 			detail += fmt.Sprintf(" (%d provider slot(s) unsupported by dialect)", unsupported)
 		}
@@ -90,7 +90,7 @@ func driftCheck(res ListResult) ai.HealthCheck {
 	return c
 }
 
-// envRefCheck catches the failure that actually bites: a server wired up
+// envRefCheck catches the failure that actually bites: an entry wired up
 // correctly everywhere whose token variable is not exported, so it fails at
 // connect time in every tool at once.
 func envRefCheck(res ListResult) (ai.HealthCheck, bool) {
@@ -121,11 +121,11 @@ func envRefCheck(res ListResult) (ai.HealthCheck, bool) {
 	sort.Strings(names)
 	c.Status = ai.HealthWarn
 	c.Detail = fmt.Sprintf("%s not set in this shell", strings.Join(names, ", "))
-	c.Hint = "export the variable(s) in your shell profile; MCP servers referencing them will fail to authenticate"
+	c.Hint = "export the variable(s) in your shell profile; MCP entries referencing them will fail to authenticate"
 	return c, true
 }
 
-// needsAuthCheck surfaces Claude Code's own record of remote MCP servers whose
+// needsAuthCheck surfaces Claude Code's own record of remote MCP entries whose
 // OAuth needs redoing. arc only reads this file.
 func needsAuthCheck(path string) (ai.HealthCheck, bool) {
 	data, err := os.ReadFile(path)
@@ -145,7 +145,7 @@ func needsAuthCheck(path string) (ai.HealthCheck, bool) {
 		Category: "mcp",
 		Name:     "mcp auth",
 		Status:   ai.HealthWarn,
-		Detail:   fmt.Sprintf("claude recorded %d server(s) needing auth: %s", len(names), strings.Join(names, ", ")),
-		Hint:     "run '/mcp' in Claude Code to re-authenticate, or remove the servers if unused",
+		Detail:   fmt.Sprintf("claude recorded %d MCP entries needing auth: %s", len(names), strings.Join(names, ", ")),
+		Hint:     "run '/mcp' in Claude Code to re-authenticate, or remove the entries if unused",
 	}, true
 }

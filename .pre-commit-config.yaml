@@ -1,5 +1,8 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
+default_language_version:
+  golang: "1.27.0"
+
 repos:
   # General file formatting
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -44,9 +47,9 @@ repos:
         pass_filenames: false
         files: ^(internal/.*\.go|go\.mod|go\.sum)$
 
-  # Matches .github/workflows/quality-go.yaml (golangci/golangci-lint-action)
+  # Matches the golangci-lint version installed by the CI quality job.
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.12.1
+    rev: 6fb5dee3889d231640dce56e5e71c522f13aef7e
     hooks:
       - id: golangci-lint-full
         entry: golangci-lint run --timeout=5m ./...
@@ -58,7 +61,7 @@ repos:
         name: deadcode
         language: golang
         additional_dependencies:
-          - golang.org/x/tools/cmd/deadcode@v0.44.0
+          - golang.org/x/tools/cmd/deadcode@v0.45.0
         entry: deadcode
         args: [-test, ./...]
         pass_filenames: false

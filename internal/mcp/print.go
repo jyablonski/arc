@@ -8,11 +8,11 @@ import (
 	"github.com/jyablonski/arc/internal/output"
 )
 
-// PrintListHuman renders the canonical servers as one row per server with a
-// column per provider, the same shape as "arc skills list".
+// PrintListHuman renders canonical MCP configuration entries as one row per
+// entry with a column per provider, the same shape as "arc skills list".
 func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
 	if len(res.Servers) == 0 {
-		_, _ = fmt.Fprintf(w, "no MCP servers in %s\n", res.CanonicalFile)
+		_, _ = fmt.Fprintf(w, "no MCP configuration entries in %s\n", res.CanonicalFile)
 		_, _ = fmt.Fprintln(w, "run 'arc mcp import' to seed it from your existing tool configs")
 		printUnmanaged(w, res)
 		return

@@ -1,6 +1,6 @@
 module github.com/jyablonski/arc
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/fatih/color v1.18.0
@@ -26,7 +26,7 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

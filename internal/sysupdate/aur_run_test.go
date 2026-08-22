@@ -54,7 +54,7 @@ func TestRunWithDeps_yayPathAndPaccache(t *testing.T) {
 	}
 
 	require.NoError(t, RunWithDeps(deps, Options{}))
-	require.Equal(t, []string{"yay", "-Syu", "--aur", "--diffmenu", "--editmenu", "--noanswerdiff", "--noansweredit"}, yayCall)
+	require.Equal(t, []string{"yay", "-Syu", "--aur", "--diffmenu", "--editmenu", "--answerdiff", "All", "--noansweredit"}, yayCall)
 	require.False(t, yayVisible, "yay output must pass through the reducer rather than mirror directly")
 	require.Contains(t, calls, []string{"sudo", "paccache", "-rv"})
 	require.Contains(t, out.String(), "captured warning")

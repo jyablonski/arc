@@ -1,33 +1,30 @@
-# Shared AI Rules
+# Shared AI rules
 
-`arc rules` keeps one shared rules file linked into supported AI provider locations.
-
-The canonical file is:
+`arc rules` keeps one canonical `AGENTS.md` file and links it into the supported AI tools. The canonical file is:
 
 ```text
 ~/ai/AGENTS.md
 ```
 
-Provider targets include:
+The current provider targets are:
 
 | Provider | Target |
-| -------- | ------ |
+| --- | --- |
 | Claude | `~/.claude/CLAUDE.md` |
 | Codex | `~/.codex/AGENTS.md` |
 | opencode | `~/.config/opencode/AGENTS.md` |
 
-`arc` creates parent directories as needed and links provider rule files back to the canonical file.
+Cursor does not currently have a rules-file target supported by `arc`.
+
+`arc` creates parent directories as needed. If a provider target contains real content instead of an `arc` symlink, sync reports a conflict and leaves it alone.
 
 ## Commands
 
-Ensure provider symlinks are in place:
-
 ```bash
 arc rules sync
-```
-
-Show per-provider symlink status:
-
-```bash
+arc rules sync --dry-run
 arc rules status
+arc rules status --json
 ```
+
+Sync is one-way. Edit `~/ai/AGENTS.md`, then run `arc rules sync` to update provider links.

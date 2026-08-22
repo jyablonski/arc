@@ -1,12 +1,12 @@
-# Shared AI Skills
+# Shared AI skills
 
-`arc skills` manages a canonical `~/ai/skills/<name>/SKILL.md` store and symlinks each skill into every supported AI provider directory.
+`arc skills` keeps one canonical skill directory and links each skill into the supported AI tools. The canonical store is `~/ai/skills/`.
 
-Supported provider targets include Claude, Codex, Cursor, and opencode. Provider slots that already hold real content are left alone; `arc` only creates or removes the symlinks it owns.
+Provider-local entries that contain real files are left alone. `arc` only creates, updates, or removes the symlinks and metadata that it owns.
 
-## Skill Format
+## Skill layout
 
-Each skill lives in its own directory and must include a `SKILL.md` file with YAML frontmatter.
+Each skill has its own directory and a `SKILL.md` file with YAML frontmatter:
 
 ```text
 ~/ai/skills/
@@ -14,15 +14,24 @@ Each skill lives in its own directory and must include a `SKILL.md` file with YA
     └── SKILL.md
 ```
 
-Validation is strict. The frontmatter name should match the canonical directory name, and `arc skills validate --fix` can rename directories when the metadata and directory drift.
+The frontmatter `name` should match the directory name. Run `arc skills validate` to check the schema. Use `--fix` to rename a canonical directory when its name does not match the frontmatter.
 
-Claude respects the `disable-model-invocation` and `user-invocable` frontmatter fields directly. Codex requires a separate `agents/openai.yaml` file, so `arc skills sync` translates an explicit `disable-model-invocation` value into the native Codex policy. `disable-model-invocation: true` writes `policy.allow_implicit_invocation: false`, preventing automatic model invocation while preserving explicit `$skill-name` invocation. Existing OpenAI metadata such as interface settings and dependencies is preserved.
+## Provider behavior
 
-This translation is necessary because Codex does not currently use the `disable-model-invocation` frontmatter field directly. See [openai/codex#10585](https://github.com/openai/codex/issues/10585) for background.
+Skills are linked into the provider directories used by Claude, Codex, Cursor, and opencode. Codex also uses an `agents/openai.yaml` file for invocation policy.
 
-### Disable Implicit Model Invocation
+When a skill sets `disable-model-invocation: true`, `arc skills sync` writes the equivalent Codex policy:
 
-For a skill that should run only when explicitly invoked, create `~/ai/skills/manual-review/SKILL.md` with both `disable-model-invocation: true` and `user-invocable: true`:
+```yaml
+policy:
+  allow_implicit_invocation: false
+```
+
+This prevents automatic invocation while preserving explicit `$skill-name` invocation. Existing OpenAI metadata is preserved. Claude reads `disable-model-invocation` and `user-invocable` directly.
+
+## Explicit-only skills
+
+Create a skill with both `disable-model-invocation: true` and `user-invocable: true` when it should run only after an explicit request:
 
 ```markdown
 ---
@@ -32,73 +41,31 @@ disable-model-invocation: true
 user-invocable: true
 ---
 
-# Manual Review
+# Manual review
 
 Inspect the current changes and report correctness issues.
 ```
 
-Preview the sync, then apply it:
+Preview the result, then apply it:
 
 ```bash
 arc skills sync --dry-run
 arc skills sync
 ```
 
-Sync links the skill into each provider and creates `~/ai/skills/manual-review/agents/openai.yaml` for Codex:
-
-```yaml
-policy:
-  allow_implicit_invocation: false
-```
-
-Codex will not select this skill automatically, but the user can still invoke it explicitly with `$manual-review`.
+For background on the Codex metadata translation, see [openai/codex#10585](https://github.com/openai/codex/issues/10585).
 
 ## Commands
 
-Promote a draft directory into the canonical store and link it everywhere:
+| Command | Purpose |
+| --- | --- |
+| `arc skills add ./draft` | Promote a draft skill directory into the canonical store. |
+| `arc skills add --new my-skill` | Create a new skill from the built-in template. |
+| `arc skills sync` | Link canonical skills into each provider. Use `--dry-run` to preview. |
+| `arc skills export ./backup` | Copy canonical skills into another parent directory. |
+| `arc skills list` | Show canonical skills and provider status. |
+| `arc skills validate --fix` | Validate frontmatter and fix supported naming mismatches. |
+| `arc skills remove my-skill` | Remove a canonical skill and its provider symlinks. Real provider files are preserved. |
+| `arc skills prune` | Remove dangling provider symlinks. |
 
-```bash
-arc skills add ./my-draft
-```
-
-Scaffold a new skill from the built-in template:
-
-```bash
-arc skills add --new my-skill
-```
-
-Ensure every canonical skill is linked into each provider. Sync is one-way: `~/ai/skills` is the source of truth, and provider-local real content is left alone for manual review.
-
-```bash
-arc skills sync
-```
-
-Copy all canonical skills into another parent directory:
-
-```bash
-arc skills export ./skills-backup
-```
-
-Show canonical skills and per-provider symlink status:
-
-```bash
-arc skills list
-```
-
-Validate skill frontmatter and fix supported naming issues:
-
-```bash
-arc skills validate --fix
-```
-
-Remove a canonical skill and sweep its provider symlinks. Provider-local real content is not removed:
-
-```bash
-arc skills remove my-skill
-```
-
-Remove dangling provider symlinks:
-
-```bash
-arc skills prune
-```
+Sync is one-way. `~/ai/skills/` is the source of truth, and provider-local real content is left for manual review.
