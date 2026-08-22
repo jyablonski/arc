@@ -1,146 +1,162 @@
 # arc
 
-A single, personal CLI for system maintenance and AI-tooling workflows on Arch Linux and macOS.
+A personal CLI for maintaining Arch Linux and macOS machines and managing local AI-tool workflows.
 
-## Overview
+`arc` gives common maintenance, inspection, and AI-tooling tasks one consistent command-line interface. It wraps the tools already used by each platform: pacman and yay on Arch Linux, and Homebrew on macOS. It adds clearer output, safer workflows, and JSON output for scripts.
 
-`arc` is a small, self-contained Go binary that pulls the everyday commands I run across my machines (system updates, package cleanup, hardware inspection, and keeping tabs on my AI coding tools) behind one consistent interface. Instead of memorizing many platform-specific commands or maintaining a ton of shell aliases, I run `arc <thing>` and get the same command, flags, and output whether I'm on Arch or a Mac.
+## What it does
 
-Under the hood it wraps the native tools each platform already ships (pacman/yay on Arch, Homebrew on macOS) and reads the local state that tools like Claude Code and Codex write to disk. `arc` adds a few things: safer defaults, clearer failure messages, consistent `--json` output, and platform detection so one command does the right thing everywhere.
+- Maintains the system: update packages, clean caches and unused dependencies, inspect hardware, list installed packages, and suspend the machine.
+- Tracks AI-tool usage: fetch current usage for Claude, Codex, and Cursor, or inspect local Claude Code and Codex session history with an API-equivalent cost estimate.
+- Shares AI configuration: keep skills, `AGENTS.md` rules, and MCP configuration in canonical locations and sync them across Claude, Codex, Cursor, and opencode.
+- Handles a few recurring workflows: validate dependencies, update `arc`, clean Docker resources, clean Git repositories, inspect AWS identity, send incident alerts, and view local `arc` usage statistics.
 
-## What it offers
+`arc` is designed for personal, local use. It does not replace the tools it wraps, and it does not create or run MCP servers.
 
-- System maintenance: one-shot system updates, cache and orphan cleanup, package statistics, hardware and system inspection, and dependency validation, each dispatching to the right package manager for the host.
-- AI coding-tool observability: live subscription/quota usage across Claude, Codex, and Cursor (`ai usage`), plus historical local token consumption with an API-equivalent cost estimate mined from on-disk session logs (`ai tokens`).
-- Shared AI configuration: a canonical store for AI skills, `AGENTS.md` rules, and MCP config, kept in sync across Claude, Codex, Cursor, and opencode (`skills`, `rules`, `mcp`).
-- Self-management: self-update from GitHub releases, one-command dependency setup, and local-only usage stats for `arc` itself.
-
-Instead of remembering scattered commands or maintaining shell aliases:
+## Quick start
 
 ```bash
-# Before
-sudo pacman -Syu && yay -Syu --aur --diffmenu --editmenu && sudo paccache -rv
-pacman -Qi | awk '/^Name/ {name=$3} /^Installed Size/ {print $4, $5, name}' | sort -h | tail -25
-# Check Claude, Codex, and Cursor usage separately
-
-# After
-arc update system
+arc validate
+arc info
 arc packages --top 25
-arc ai usage
+arc ai health
 arc ai tokens
 ```
 
-## How it works
-
-- One command, two platforms: `arc` detects the host and dispatches to the native tooling (pacman/yay/paccache on Arch, Homebrew on macOS), so the same command works on both. Arch-only flags such as `--aur-only` return a clear unsupported-platform error on macOS rather than failing silently.
-- AUR takeover triage: before yay runs, `arc update system` checks pending AUR updates for takeover signals (maintainer changes, orphan adoptions, deletions, one account grabbing many packages) and scans changed package files for high-signal patterns, flagging only what's new since the last trusted run. It surfaces findings; you still decide at yay's diffmenu. See [platforms](docs/platforms.md) for details.
-- Reads local state, never re-authenticates: the AI commands never run their own login flows. `ai usage` reads whatever credentials each vendor tool already stored (Claude's OAuth token, Codex's app-server session, Cursor's local session DB) and calls each provider's usage API, isolating failures per provider. `ai tokens` is fully offline: it scans the session transcripts Claude Code and Codex write to `~/.claude` and `~/.codex` and prices them from a local pricing table.
-- Consistent output: every command supports `--json` for scripting, with colored, human-readable output by default.
-- Local and private by default: usage tracking and token accounting stay on the machine; nothing is uploaded.
+Most commands print human-readable output. Add `--json` or `-j` when the result needs to be consumed by another tool.
 
 ## Installation
 
-Download the latest release. Most people want amd64, on Linux or an Intel Mac (swap `arc-linux-amd64` for `arc-darwin-amd64` on an Intel Mac):
+Release binaries are available for Linux x86_64, macOS Intel, and Apple Silicon Macs.
 
 ```bash
-curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-linux-amd64 -o ~/.local/bin/arc
+mkdir -p ~/.local/bin
+
+# Choose the asset for your system:
+release_asset=arc-linux-amd64       # Linux x86_64
+# release_asset=arc-darwin-amd64    # macOS Intel
+# release_asset=arc-darwin-arm64    # macOS Apple Silicon
+
+curl -L "https://github.com/jyablonski/arc/releases/latest/download/$release_asset" -o ~/.local/bin/arc
+
 chmod +x ~/.local/bin/arc
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-On an Apple Silicon Mac:
-
-```bash
-curl -L https://github.com/jyablonski/arc/releases/latest/download/arc-darwin-arm64 -o ~/.local/bin/arc
-chmod +x ~/.local/bin/arc
-```
-
-Unsigned GitHub release binaries may be quarantined by macOS. If macOS blocks the first run, approve it in System Settings or remove the quarantine attribute:
+If macOS blocks an unsigned release binary on its first launch, approve it in System Settings or remove its quarantine attribute:
 
 ```bash
 xattr -d com.apple.quarantine ~/.local/bin/arc
 ```
 
-Make sure `~/.local/bin` is in your `PATH`:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Or build from source:
+To build and install from source:
 
 ```bash
 git clone https://github.com/jyablonski/arc.git
 cd arc
-
-# this builds the binary and installs it to ~/.local/bin
 make install
 ```
 
-Starting from version 0.4.0, if you already have `arc` installed, you can update the binary with:
+Once `arc` is installed, update it with:
 
 ```bash
 arc update self
 ```
 
-## Commands
+## Common commands
 
 ### System maintenance
 
-| Command         | Arch Linux                     | macOS                         | Example                    |
-| --------------- | ------------------------------ | ----------------------------- | -------------------------- |
-| `update system` | pacman, yay, paccache          | Homebrew                      | `arc update system`        |
-| `update uv`     | `uv self update`               | `uv self update`              | `arc update uv`            |
-| `clean`         | pacman cache and orphans       | `brew cleanup` / `autoremove` | `arc clean --orphans-only` |
-| `packages`      | pacman stats and size info     | Homebrew package summary      | `arc packages --json`      |
-| `installed`     | pacman explicit packages / AUR | Homebrew formulae             | `arc installed --count`    |
-| `info`          | fastfetch                      | fastfetch                     | `arc info`                 |
-| `parts`         | dmidecode, lspci, lshw         | system_profiler, sysctl       | `arc parts`                |
-| `sleep`         | systemd suspend                | pmset sleep                   | `arc sleep`                |
+| Command | Purpose | Example |
+| --- | --- | --- |
+| `update system` | Update system packages; includes AUR review on Arch | `arc update system` |
+| `update uv` | Update the `uv` package manager | `arc update uv` |
+| `clean` | Clean package caches, unused dependencies, and `arc` logs | `arc clean` |
+| `packages` | Show package counts, sizes, and cache information | `arc packages --top 25` |
+| `installed` | List explicitly installed packages | `arc installed` |
+| `info` | Show system information with `fastfetch` | `arc info` |
+| `parts` | Show hardware information | `arc parts` |
+| `sleep` | Suspend the machine | `arc sleep` |
+
+Arch uses pacman and yay; macOS uses Homebrew. Some output is necessarily platform-specific. Arch-only flags such as `--aur-only` and `--no-aur` return an error on macOS when used explicitly.
 
 ### AI tooling
 
-| Command       | Description                                                | Example           |
-| ------------- | ---------------------------------------------------------- | ----------------- |
-| `ai usage`    | Live subscription/quota usage across Claude, Codex, Cursor | `arc ai usage`    |
-| `ai tokens`   | Historical local token usage with API-equivalent cost      | `arc ai tokens`   |
-| `ai sessions` | List recent local Claude and Codex sessions                | `arc ai sessions` |
-| `ai health`   | Offline auth/tooling/config health check across AI tools   | `arc ai health`   |
-| `ai pricing`  | Refresh the local model pricing cache used by `ai tokens`  | `arc ai pricing`  |
-| `skills`      | Sync shared AI/LLM skills across providers                 | `arc skills sync` |
-| `rules`       | Sync the shared `AGENTS.md` rules file across providers    | `arc rules sync`  |
-| `mcp`         | Sync shared MCP config across providers                    | `arc mcp sync`    |
+| Command | Purpose | Example |
+| --- | --- | --- |
+| `ai usage` | Fetch current usage limits for Claude, Codex, and Cursor | `arc ai usage` |
+| `ai tokens` | Report historical local token usage and estimated cost | `arc ai tokens` |
+| `ai sessions` | List recent local Claude Code and Codex sessions | `arc ai sessions` |
+| `ai health` | Check AI-tool auth, dependencies, and local configuration | `arc ai health` |
+| `ai pricing` | Refresh the local pricing cache used by `ai tokens` | `arc ai pricing` |
 
-### arc itself
+`ai usage` uses credentials already stored by the vendor tools and calls their usage APIs. `ai tokens` and `ai sessions` read local session data; they do not upload it.
 
-| Command       | Description                             | Example            |
-| ------------- | --------------------------------------- | ------------------ |
-| `update self` | Update `arc` to the latest release      | `arc update self`  |
-| `setup`       | Install the tools `arc` depends on      | `arc setup`        |
-| `validate`    | Check that required tools are in `PATH` | `arc validate`     |
-| `stats`       | Show local `arc` command usage stats    | `arc stats --json` |
+### Shared AI configuration
 
-Arch-only flags such as `--aur-only` and `--no-aur` return an unsupported-platform error on macOS when explicitly used. Every command supports `--json` (`-j`); use `arc <command> --help` for detailed flag information.
+| Command | Purpose | Canonical location |
+| --- | --- | --- |
+| `skills` | Manage shared skill definitions | `~/ai/skills/` |
+| `rules` | Manage shared `AGENTS.md` rules | `~/ai/AGENTS.md` |
+| `mcp` | Manage canonical MCP configuration and sync it across AI tools | `~/ai/mcp.json` |
 
-## Additional Documentation
+Skills and rules use symlinks where the provider supports them. MCP configuration is merged into each provider's existing configuration format, so unrelated settings and hand-managed entries are preserved. `arc mcp add` writes an MCP configuration entry; it does not install, create, or start an MCP server. See [MCP configuration](docs/mcp.md).
 
-More detailed notes are available in `docs/`:
+Useful examples:
+
+```bash
+arc skills sync
+arc rules sync
+arc mcp list
+arc mcp sync
+```
+
+### Other workflows
+
+| Command | Purpose | Example |
+| --- | --- | --- |
+| `setup` | Install tools required by `arc` | `arc setup` |
+| `validate` | Check required tools in `PATH` | `arc validate` |
+| `docker clean` | Prune Docker images, containers, and volumes | `arc docker clean` |
+| `git cleanup` | Remove merged branches and prune remote references | `arc git cleanup` |
+| `aws whoami` | Show the current AWS identity | `arc aws whoami` |
+| `incident [title]` | Send an incident alert to Slack and optionally Discord | `arc incident "Database outage"` |
+| `stats` | Show local `arc` command usage | `arc stats --json` |
+
+Run `arc <command> --help` for flags and detailed behavior.
+
+## Design notes
+
+- Native tools first: `arc` delegates platform-specific work to the package manager and system utilities already installed on the machine.
+- Local state by default: configuration, session history, token accounting, and usage statistics are stored locally. Commands that fetch live provider usage or pricing make network requests when needed.
+- Canonical configuration: shared skills, rules, and MCP configuration have one source of truth under `~/ai/`; provider-specific files are updated from that source.
+- AUR review: before yay runs, `arc update system` checks pending AUR updates for takeover signals and scans changed package files for high-signal patterns. See [AUR review](docs/aur_review.md).
+
+## Documentation
 
 - [AUR review](docs/aur_review.md)
 - [AI usage](docs/ai_usage.md)
 - [AI tokens](docs/ai_tokens.md)
+- [AI sessions](docs/ai_sessions.md)
+- [AI health](docs/ai_health.md)
 - [AI pricing](docs/ai_pricing.md)
+- [Incident alerts](docs/incident.md)
+- [Local usage statistics](docs/stats.md)
 - [Shared skills](docs/skills.md)
 - [Shared rules](docs/rules.md)
-- [Shared MCP config](docs/mcp.md)
+- [MCP configuration](docs/mcp.md)
+- [Platform behavior](docs/platforms.md)
 
 ## Development
 
+Requires Go 1.27.0.
+
 ```bash
-make build     # Build binary
-make install   # Build and install to ~/.local/bin
-make test      # Run tests
-make fmt       # Format code
-make lint      # Run linter
+make build
+make install
+go test ./...
+make fmt
+make lint
 ```
 
 ## License

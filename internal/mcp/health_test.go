@@ -84,7 +84,7 @@ func TestHealthChecks_SurfacesClaudeNeedsAuthCache(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, ai.HealthWarn, c.Status)
 	assert.Contains(t, c.Detail, "claude.ai Gmail")
-	assert.Contains(t, c.Detail, "2 server(s)")
+	assert.Contains(t, c.Detail, "2 MCP entries")
 }
 
 func TestHealthChecks_NoAuthCacheNoCheck(t *testing.T) {

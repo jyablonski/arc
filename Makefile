@@ -12,6 +12,9 @@ BUILD_DIR=bin
 # Version (can be set via VERSION env var or detected from git)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
+# Go 1.27-compatible golangci-lint build used by CI and pre-commit
+GOLANGCI_LINT_VERSION ?= v2.13.2-0.20260821235006-6fb5dee3889d
+
 # LDFLAGS for version injection
 LDFLAGS = -X github.com/jyablonski/arc/cmd.version=$(VERSION)
 
@@ -100,9 +103,9 @@ mocks: ## Regenerate moq mocks (uses `tool github.com/matryer/moq` from go.mod)
 		exit 1; \
 	fi
 
-lint: ## Run linter (requires golangci-lint)
+lint: ## Run the pinned golangci-lint version
 	@echo "Running linter..."
-	@golangci-lint run || echo "golangci-lint not installed, skipping"
+	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m ./...
 
 tidy: ## Tidy Go module dependencies
 	@echo "Tidying Go module dependencies..."

@@ -18,6 +18,18 @@ make test-ci        # CI: tests + JUnit + filtered coverage.out (same filter as 
 
 **Mocks:** External-ish interfaces use [moq](https://github.com/matryer/moq) (`go.mod` `tool` directive). Shared stubs live in `internal/boundary` (`HTTPDoer`, `ShellRunner`); `internal/ai.Provider` and `notify.Notifier` generate mocks in-package. Regenerate with `make mocks` whenever those interfaces change.
 
+## Go version upgrades
+
+Update all of these together when changing the supported Go version:
+
+- `go.mod` — update the `go` directive, then run `go mod tidy` to refresh `go.sum`.
+- `.github/workflows/ci-cd.yaml` — update `GO_VERSION`, `GO_TOOLS_VERSION`, and `GOLANGCI_LINT_VERSION`. The quality job must build analysis tools with the same Go version as the project.
+- `.pre-commit-config.yaml` — update `default_language_version.golang`, the pinned golangci-lint revision, and the `deadcode` `golang.org/x/tools` version.
+- `Makefile` — update `GOLANGCI_LINT_VERSION` so `make lint` uses the same analyzer as CI and pre-commit.
+- `README.md` — update the development Go requirement.
+
+After changing versions, run `go mod tidy`, `go mod verify`, `go test ./...`, `pre-commit validate-config`, `pre-commit run golangci-lint-full --all-files`, `pre-commit run deadcode --all-files`, and `make lint`. Run `pre-commit clean` and reinstall hooks when refreshing an existing local environment.
+
 ## Library layout (non-Cobra)
 
 - `internal/boundary` — narrow interfaces + moq stubs for HTTP / shell boundaries (`DefaultShell` delegates to `internal/shell`)

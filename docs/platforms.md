@@ -1,128 +1,65 @@
-# Platform Support
+# Platform support
 
-`arc` supports the two platforms this tool is built around:
+`arc` supports the two platforms this project is built around:
 
-- Arch Linux, using pacman, yay, systemd, and Linux hardware tools
-- macOS, using Homebrew, pmset, system_profiler, and sysctl
+- Arch Linux, using pacman, yay, systemd, and Linux hardware tools.
+- macOS, using Homebrew, `pmset`, `system_profiler`, and `sysctl`.
 
-The command tree stays mostly the same on both platforms. Commands dispatch to platform-specific implementations internally, so users can generally run the same `arc` command and get the native behavior for that system.
+Most commands use the same command name on both platforms, but the underlying tool and some output differ.
 
-## How It Works
+## Commands shared by both platforms
 
-Platform support is selected once when the CLI starts. The `cmd` package builds an `App` value from `platform.Detect()`:
+These commands are available on Arch Linux and macOS:
 
-```go
-var app = newApp(platform.Detect())
-```
+| Area | Commands |
+| --- | --- |
+| System | `update system`, `update uv`, `clean`, `packages`, `installed`, `info`, `parts`, `sleep` |
+| AI tooling | `ai usage`, `ai tokens`, `ai sessions`, `ai health`, `ai pricing` |
+| Shared AI configuration | `skills`, `rules`, `mcp` |
+| Local workflows | `setup`, `validate`, `stats`, `update self` |
 
-`internal/platform` exposes a small typed platform enum:
+The command name is shared, but the result is not always identical. For example, `packages` reports pacman data on Arch and Homebrew data on macOS, while `parts` reports native hardware diagnostics rather than a stable cross-platform schema.
 
-- `platform.Linux`
-- `platform.Darwin`
-- `platform.Unknown`
+## Arch Linux
 
-The app wires platform-specific implementations behind narrow interfaces:
+`arc` expects an Arch-style package environment with pacman. AUR workflows use yay when it is installed.
 
-- `internal/pkgmgr` handles package operations like update, clean, installed packages, and package summaries.
-- `internal/syscontrol` handles system actions like sleep.
-- `internal/hardware` handles hardware reporting.
-- `internal/setupdeps` handles dependency installation.
-- `internal/deps` provides the tool list used by `arc validate`.
-
-Most command handlers do not switch on `runtime.GOOS`. They call the app dependency for that concern:
-
-```go
-return app.PkgMgr.Clean(pkgmgr.CleanOptions{
-    OrphansOnly: cleanOrphansOnly,
-    CacheOnly:   cleanCacheOnly,
-})
-```
-
-The platform switch lives inside the boundary factory instead:
-
-```go
-func New(os platform.OS) Manager {
-    switch os {
-    case platform.Linux:
-        return linuxManager{}
-    case platform.Darwin:
-        return darwinManager{}
-    default:
-        return unsupportedManager{}
-    }
-}
-```
-
-This keeps commands mostly platform-blind while still allowing each platform implementation to use its native tools. The main exception is platform-specific user intent, such as `--aur-only` or `--no-aur`, where the command returns a clear error if the flag is used on macOS.
-
-## Shared Commands
-
-These commands are intended to work on both Arch Linux and macOS:
-
-- `arc update self`
-- `arc update uv`
-- `arc update system`
-- `arc clean`
-- `arc packages`
-- `arc installed`
-- `arc info`
-- `arc parts`
-- `arc sleep`
-- `arc validate`
-- `arc setup`
-- `arc ai usage`
-- `arc skills`
-- `arc rules`
-
-Some output is intentionally platform-specific. For example, `arc packages` reports pacman package details on Arch and Homebrew package details on macOS. `arc parts` is human-readable hardware diagnostics, not a stable cross-platform schema.
-
-## Arch Linux Behavior
-
-- **Repository updates** — `arc update system` shows pacman's resolved transaction, asks for approval, rechecks the plan, and verifies the installed versions. Use `--yes` to skip only this approval prompt.
-- **AUR updates** — arc highlights pending versions, ignored packages, maintainer changes, suspicious build-script changes, and other takeover signals. Yay still owns dependency resolution, diffs, editing, and builds; arc shows its interactive gates and important warnings while folding routine build output into transient progress.
-- **Trust and logs** — reviewed AUR snapshots are trusted only after the installed state matches the reviewed plan. Failures include a sanitized in-memory subprocess tail without creating a file. Use `--log` to save complete raw output privately under `$XDG_STATE_HOME/arc/update-logs/` or `~/.local/state/arc/update-logs/`; `ARC_UPDATE_LOG_DIR` overrides that location.
-- See [Reviewing AUR diffs](aur_review.md) for the review workflow and warning signs.
-- `arc clean` clears the pacman cache, orphaned packages, and Arc update logs. Use `--logs-only` to remove only the logs.
+- `arc update system` updates repository packages, reviews AUR changes, and then lets pacman or yay perform the update.
+- `arc clean` clears the pacman cache, removes orphaned packages, and cleans `arc` update logs. Use `--logs-only` to remove only the logs.
 - `arc packages` and `arc installed` read pacman package metadata.
-- `arc sleep` uses systemd.
-- `arc parts` uses tools like `dmidecode`, `lspci`, `lshw`, and `nvidia-smi`.
+- `arc sleep` uses `systemctl suspend`.
+- `arc parts` uses tools such as `dmidecode`, `lspci`, `lshw`, and `nvidia-smi` when available.
 - `arc setup` installs dependencies with pacman.
 
-Arch-only flags such as `--aur-only` and `--no-aur` are valid on Arch Linux.
+The flags `--no-aur`, `--yes`, and `--log` apply to the Linux `update system` workflow. The `installed --aur-only` filter is also Linux-only. See [Reviewing AUR diffs](aur_review.md) for the review process and warning signs.
 
-## macOS Behavior
+## macOS
 
-On macOS:
+`arc` uses Homebrew for package operations. Homebrew must already be installed; `arc setup` installs required tools through Homebrew but does not install Homebrew itself.
 
-- `arc update system` runs `brew update`, `brew upgrade`, and optional `brew cleanup`.
-- `arc clean` runs `brew cleanup`, `brew autoremove`, and clears Arc update logs. Use `--logs-only` to remove only the logs.
+- `arc update system` runs `brew update`, `brew upgrade`, and optional cleanup.
+- `arc clean` runs Homebrew cleanup and autoremove, then cleans `arc` update logs. Use `--logs-only` to remove only the logs.
 - `arc packages` and `arc installed` read Homebrew formula and cask metadata.
 - `arc sleep` uses `pmset sleepnow`.
 - `arc parts` uses `system_profiler` and `sysctl`.
-- `arc setup` installs missing tools with Homebrew, but it does not install Homebrew itself.
 
-Arch-only flags return an unsupported-platform error on macOS when explicitly used.
+Linux-only flags return an unsupported-platform error on macOS when explicitly used.
 
 ## Releases
 
-GitHub releases publish three binaries:
+GitHub Releases publish three binaries:
 
 - `arc-linux-amd64`
 - `arc-darwin-arm64`
 - `arc-darwin-amd64`
 
-macOS binaries are distributed directly from GitHub Releases, not through a Homebrew formula. Unsigned release binaries may be quarantined by macOS; see the README install notes for the `xattr` command if macOS blocks the first run.
+macOS binaries are distributed directly from GitHub Releases rather than through a Homebrew formula. Unsigned binaries may be quarantined by macOS. See the [installation notes](../README.md#installation) if macOS blocks the first run.
 
-## Testing
+## Development checks
 
-The CI pipeline verifies platform support with:
+The project tests Linux behavior on Ubuntu, runs macOS runtime tests, checks Darwin cross-compilation for both architectures, and builds all three release binaries in CI.
 
-- Linux tests and coverage on Ubuntu
-- macOS runtime tests on `macos-latest`
-- Darwin cross-compile checks for `arm64` and `amd64`
-- release builds for Linux and both macOS architectures
-
-For local checks:
+Run the regular tests and the cross-platform compile checks locally with:
 
 ```bash
 go test ./...

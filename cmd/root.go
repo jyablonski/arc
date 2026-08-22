@@ -12,10 +12,10 @@ var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:   "arc",
-	Short: "A personal CLI tool for system management",
-	Long: `arc is a personal CLI tool for system management, maintenance, and dev workflows
-on Linux and macOS. It provides a consistent interface for system operations with
-better argument handling, help text, colored output, and error handling.`,
+	Short: "Maintain Arch Linux and macOS machines and local AI-tool workflows",
+	Long: `arc is a personal CLI for maintaining Arch Linux and macOS machines and
+managing local AI-tool workflows. It wraps native system tools and coordinates
+AI-tool configuration and usage with consistent commands, output, and JSON support.`,
 	Version: version,
 }
 
