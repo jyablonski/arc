@@ -96,7 +96,7 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 			result, runYay := runAURReview(d, renderer)
 			if runYay {
 				renderer.Info("yay review prompts follow; build details stay in the log")
-				yayArgs := []string{"-Syu", "--aur", "--diffmenu", "--editmenu", "--noanswerdiff", "--noansweredit"}
+				yayArgs := []string{"-Syu", "--aur", "--diffmenu", "--editmenu", "--answerdiff", "All", "--noansweredit"}
 				yayLogStart := log.command("yay", yayArgs...)
 				yayOutput := newAUROutput(log.Writer(), renderer)
 				err := d.RunLogged(yayOutput, false, "yay", yayArgs...)

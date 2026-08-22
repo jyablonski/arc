@@ -6,7 +6,9 @@ Arc trusts a reviewed snapshot only after the installed state matches the review
 
 ## Driving yay's diffmenu
 
-At `Diffs to show?`:
+When `arc update system` invokes yay, it passes `--answerdiff All`, so yay chooses `All` for the diff menu instead of leaving the blank-response default at `[N]one` and skipping the review. The PKGBUILD edit menu remains interactive.
+
+When driving yay directly, at `Diffs to show?`:
 
 - `a` + Enter: show diffs for all packages
 - `1`, `1 3`, `1-3`: show diffs for specific packages by number
@@ -20,7 +22,7 @@ Diffs open in your `$PAGER` (usually `less`). Press `q` to close the current dif
 The raw `less` view is the default, not the only option:
 
 - **Better pager, zero yay changes.** yay pipes diffs through `$YAYPAGER` and falls back to `$PAGER`. For example, `export YAYPAGER='delta --side-by-side'` gives syntax-highlighted, side-by-side diffs. `bat -l diff` works too.
-- **Read it in your editor instead.** Answer `N` to `Diffs to show?` and pick packages at the `PKGBUILDs to edit?` prompt. Yay opens the files in `$EDITOR`. With `EDITOR='code --wait'` or `nvim`, close the editor window to continue. This shows the current files, not a diff.
+- **Read it in your editor instead.** When driving yay directly, answer `N` to `Diffs to show?` and pick packages at the `PKGBUILDs to edit?` prompt. Yay opens the files in `$EDITOR`. With `EDITOR='code --wait'` or `nvim`, close the editor window to continue. This shows the current files, not a diff.
 - **Inspect the clone yourself.** Yay keeps its checkouts in `~/.cache/yay/<pkgbase>/`, which is a plain Git repository. From another terminal, run `git -C ~/.cache/yay/cursor-bin log -p`, or open the repository in a Git GUI or diff tool.
 - **Browse it on the web.** Every package's history is public cgit: `https://aur.archlinux.org/cgit/aur.git/log/?h=<pkgbase>` shows each commit as a clickable diff in your browser.
 
