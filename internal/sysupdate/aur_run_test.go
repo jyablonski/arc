@@ -54,12 +54,53 @@ func TestRunWithDeps_yayPathAndPaccache(t *testing.T) {
 	}
 
 	require.NoError(t, RunWithDeps(deps, Options{}))
-	require.Equal(t, []string{"yay", "-Syu", "--aur", "--diffmenu", "--editmenu", "--answerdiff", "All", "--noansweredit"}, yayCall)
+	require.Equal(t, []string{
+		"yay", "-Syu", "--aur",
+		"--answerupgrade", "None",
+		"--cleanmenu=false",
+		"--diffmenu", "--answerdiff", "All",
+		"--editmenu=false",
+	}, yayCall)
 	require.False(t, yayVisible, "yay output must pass through the reducer rather than mirror directly")
 	require.Contains(t, calls, []string{"sudo", "paccache", "-rv"})
 	require.Contains(t, out.String(), "captured warning")
 	require.NotContains(t, out.String(), "noisy build output")
-	require.Contains(t, out.String(), "yay review prompts follow; build details stay in the log")
+	require.Contains(t, out.String(), "no suspicious changes detected")
+	require.NotContains(t, out.String(), "all AUR build-file diffs follow automatically")
+}
+
+func TestPrintAURReview_hidesInformationalNoise(t *testing.T) {
+	var out bytes.Buffer
+	result := &aurreview.Result{
+		Updates: []aurreview.Update{{Name: "spotify", PackageBase: "spotify", InstalledVersion: "1", TargetVersion: "2"}},
+		Findings: []aurreview.Finding{
+			{Pkg: "spotify", Severity: aurreview.Info, Message: "unencrypted source URL", Location: "PKGBUILD:10"},
+			{Pkg: "spotify", Severity: aurreview.Info, Message: "SKIP checksum on 3 lines", Location: "PKGBUILD:20"},
+		},
+	}
+
+	printAURReview(Renderer{Out: &out, Width: 60}, result, nil, time.Unix(0, 0))
+
+	require.Contains(t, out.String(), "no suspicious changes detected")
+	require.NotContains(t, out.String(), "unencrypted source URL")
+	require.NotContains(t, out.String(), "SKIP checksum")
+}
+
+func TestPrintAURReview_keepsSuspiciousFindings(t *testing.T) {
+	var out bytes.Buffer
+	result := &aurreview.Result{
+		Updates: []aurreview.Update{{Name: "foo", PackageBase: "foo", InstalledVersion: "1", TargetVersion: "2"}},
+		Findings: []aurreview.Finding{
+			{Pkg: "foo", Severity: aurreview.High, Message: "pipe-to-shell", Location: "PKGBUILD:10"},
+			{Pkg: "foo", Severity: aurreview.Warn, Message: "runtime network download", Location: "PKGBUILD:10"},
+		},
+	}
+
+	printAURReview(Renderer{Out: &out, Width: 60}, result, nil, time.Unix(0, 0))
+
+	require.Contains(t, out.String(), "2 suspicious changes detected")
+	require.Contains(t, out.String(), "✗ foo: pipe-to-shell (PKGBUILD:10)")
+	require.Contains(t, out.String(), "⚠ foo: runtime network download (PKGBUILD:10)")
 }
 
 func TestRunWithDeps_aurReviewCommitsOnYaySuccess(t *testing.T) {

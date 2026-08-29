@@ -47,11 +47,12 @@ var updateSystemCmd = &cobra.Command{
 	Short: "Run system package updates",
 	Long: `Update the system packages. On Linux, arc renders and gates the resolved pacman
 transaction, verifies installed versions, optionally runs yay -Syu --aur with its
-native diff and PKGBUILD review prompts, and optionally cleans the package cache.
-Before yay runs, arc triages pending AUR updates for takeover signals and scans
-changed package files for high-signal patterns. Use --log to save complete raw
-output under Arc's state directory. macOS runs brew update, brew upgrade, and
-optional brew cleanup.`,
+PKGBUILD and related build-file diffs shown automatically, and optionally cleans
+the package cache. Arc skips yay's exclude, clean-build, and edit menus; you are
+prompted only when yay needs a real transaction decision. Before yay runs, arc
+triages pending AUR updates for takeover signals and scans changed package files
+for high-signal patterns. Use --log to save complete raw output under Arc's state
+directory. macOS runs brew update, brew upgrade, and optional brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {
 			return arcerrs.ErrNoAURLinuxOnly

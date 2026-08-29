@@ -1,14 +1,14 @@
-// Package aurreview adds a triage layer on top of yay's interactive diffmenu:
+// Package aurreview adds a triage layer on top of yay's automatic diff review:
 //  1. provenance baseline tracking: maintainer changes, orphan adoptions, and
 //     packages deleted out from under you are all takeover signals
 //  2. static scan of the incoming package files — the full cgit snapshot
 //     (PKGBUILD, .install, hooks, patches, local sources), diffed against the
 //     last trusted snapshot so only lines you haven't already vetted are
-//     flagged
+//     flagged, including checksum weakening and privilege/persistence signals
 //  3. cross-package cluster detection (one account touching many at once)
 //
 // It NEVER decides for you. It surfaces findings and routes your attention;
-// you still make the call at the diffmenu. grep-based scanning has false
+// you still make the call at yay's install prompt. Pattern-based scanning has false
 // positives (e.g. a SKIP sum that's overridden on the next line) and is
 // defeated by obfuscation, so treat HIGH findings as "look here first",
 // not "reject".
@@ -425,14 +425,22 @@ var scanPatterns = []struct {
 }{
 	// Second-stage ecosystem fetches: the thing checksums DON'T cover.
 	{regexp.MustCompile(`\b(npm|pnpm|yarn|bun)\s+(install|add|i|ci|x)\b`), High, "node-ecosystem fetch", true},
-	{regexp.MustCompile(`\bpip[0-9]?\s+install\b`), High, "pip fetch", true},
+	{regexp.MustCompile(`\b(pip[0-9]?|python[0-9]?(\.[0-9]+)?\s+-m\s+pip)\s+install\b`), High, "pip fetch", true},
 	{regexp.MustCompile(`\bcargo\s+(install|add|fetch)\b`), High, "cargo fetch", true},
 	{regexp.MustCompile(`\bgo\s+(install|get)\b`), High, "go fetch", true},
-	{regexp.MustCompile(`(?i)\b(curl|wget)\b[^\n|]*\|\s*(ba|z|fi)?sh\b`), High, "pipe-to-shell", false},
+	{regexp.MustCompile(`(?i)\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|fi)?sh\b`), High, "pipe-to-shell", false},
+	{regexp.MustCompile(`(?i)\b(ba|z|fi)?sh\s+<\(\s*(curl|wget)\b`), High, "download-to-shell process substitution", false},
+	{regexp.MustCompile(`(/dev/(tcp|udp)/|\bnc(at)?\b[^\n]*\s-e\b|\bsocat\b[^\n]*\bexec:)`), High, "reverse-shell primitive", false},
+	{regexp.MustCompile(`\b(sudo|doas)\b`), High, "privilege escalation command", false},
 	// Common payload-obfuscation and privilege tells.
 	{regexp.MustCompile(`\bbase64\s+(-d|--decode)\b`), Warn, "base64 decode", false},
 	{regexp.MustCompile(`\beval\b`), Warn, "eval", false},
-	{regexp.MustCompile(`\bchmod\b[^\n]*\+s\b`), Warn, "setuid/setgid bit", false},
+	{regexp.MustCompile(`\bchmod\b[^\n]*(\+s|[2467][0-7]{3})\b`), Warn, "setuid/setgid bit", false},
+	{regexp.MustCompile(`\b(systemctl\s+(enable|reenable|start|restart)|crontab)\b`), Warn, "service activation or persistence command", false},
+	{regexp.MustCompile(`(/etc/(sudoers(\.d)?|cron(\.d|\.daily|\.hourly|\.weekly|\.monthly)?|systemd/system)|\.config/autostart/|\.(bashrc|zshrc|profile)\b)`), Warn, "sensitive system or startup path", false},
+	{regexp.MustCompile(`(?i)\b(http|ftp|git)://`), Info, "unencrypted source URL", false},
+	{regexp.MustCompile(`(?i)\b(curl|wget|aria2c)\b`), Warn, "runtime network download", false},
+	{regexp.MustCompile(`\b(git\s+clone|svn\s+checkout|hg\s+clone)\b`), Warn, "runtime VCS checkout", false},
 	// Install-time execution on YOUR host (outside the build sandbox).
 	{regexp.MustCompile(`\b(pre|post)_(install|upgrade|remove)\s*\(\)`), Warn, "install/upgrade hook function", false},
 	{regexp.MustCompile(`(?m)^\s*install\s*=`), Info, "declares an .install file", false},
@@ -443,6 +451,12 @@ var scanPatterns = []struct {
 var pinnedRE = regexp.MustCompile(`--locked\b|--frozen-lockfile\b|--immutable\b|--require-hashes\b|--offline\b|\bnpm ci\b`)
 
 var installDeclRE = regexp.MustCompile(`(?m)^\s*install\s*=\s*['"]?([^'"\s]+)`)
+
+var (
+	checksumAssignRE = regexp.MustCompile(`^\s*(md5|sha1|sha224|sha256|sha384|sha512|b2)sums(_[[:alnum:]_]+)?(\[[^]]+\])?\s*\+?=`)
+	sourceAssignRE   = regexp.MustCompile(`^\s*source(_[[:alnum:]_]+)?\s*\+?=`)
+	validPGPKeysRE   = regexp.MustCompile(`^\s*validpgpkeys\s*\+?=`)
+)
 
 // skipSumRE matches the makepkg SKIP keyword. Case-sensitive on purpose: SKIP
 // is always uppercase in a sums array, so this won't fire on prose like
@@ -461,6 +475,7 @@ var urlHostRE = regexp.MustCompile(`(?i)\b(?:https?|git|ftp)://([^/'"\s)]+)`)
 // persist them as the next trusted snapshot.
 func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, map[string]string) {
 	base := info.PackageBase
+	var findings []Finding
 	files, binaries, err := r.fetchSnapshot(ctx, base)
 	if err != nil {
 		// Snapshot endpoint down or tarball unusable; fall back to fetching the
@@ -472,16 +487,22 @@ func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, ma
 			return []Finding{{base, Warn,
 				fmt.Sprintf("could not fetch files for scan: %v", errors.Join(err, looseErr)), ""}}, nil
 		}
+		findings = append(findings, Finding{base, Warn,
+			fmt.Sprintf("full AUR snapshot unavailable; scanned a limited PKGBUILD fallback and may have missed related files: %v", err), ""})
 	}
 
 	prev := r.loadCache(base)
-	var findings []Finding
 	for _, name := range binaries {
 		findings = append(findings, Finding{base, Warn,
 			"binary or oversized file in AUR repo (not scanned): " + name, ""})
 	}
 
 	for _, fname := range slices.Sorted(maps.Keys(files)) {
+		// .SRCINFO is generated from PKGBUILD. Scanning it repeats the same
+		// findings without covering any additional executable build logic.
+		if fname == ".SRCINFO" {
+			continue
+		}
 		prevLines := map[string]struct{}{}
 		if prevContent, ok := prev[fname]; ok {
 			for l := range strings.SplitSeq(prevContent, "\n") {
@@ -503,6 +524,8 @@ func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, ma
 			if _, trusted := prevLines[line]; trusted {
 				continue
 			}
+			var lineFindings []Finding
+			maxSeverity := Info
 			for _, p := range scanPatterns {
 				if !p.re.MatchString(line) {
 					continue
@@ -511,32 +534,137 @@ func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, ma
 				if p.fetch && pinnedRE.MatchString(line) {
 					sev, label = Warn, label+" (lockfile-pinned)"
 				}
-				findings = append(findings, Finding{
+				maxSeverity = max(maxSeverity, sev)
+				lineFindings = append(lineFindings, Finding{
 					Pkg:      base,
 					Severity: sev,
 					Message:  label + ": " + strings.TrimSpace(line),
 					Location: fmt.Sprintf("%s:%d", fname, i+1),
 				})
 			}
+			for _, finding := range lineFindings {
+				// A high-signal match explains the line; lower-severity matches on
+				// that same line would only repeat it as noise.
+				if finding.Severity == maxSeverity {
+					findings = append(findings, finding)
+				}
+			}
 			if skipSumRE.MatchString(line) {
 				skipLines = append(skipLines, i+1)
 			}
 		}
 		// One aggregated SKIP finding per file instead of one per line.
-		if len(skipLines) > 0 {
+		curChecksums := inspectChecksums(files[fname])
+		prevContent, hadPrevious := prev[fname]
+		prevChecksums := inspectChecksums(prevContent)
+		weakened := fname == "PKGBUILD" && hadPrevious && prevChecksums.skipCount < curChecksums.skipCount
+		if weakened && len(skipLines) == 0 {
+			skipLines = curChecksums.skipLines
+		}
+		if len(skipLines) > 0 || weakened {
+			severity := Info
+			message := fmt.Sprintf("SKIP checksum on %d line(s) — verify no real source is left unchecked", len(skipLines))
+			if weakened {
+				severity = High
+				message = fmt.Sprintf("checksum verification weakened: SKIP entries increased from %d to %d", prevChecksums.skipCount, curChecksums.skipCount)
+			}
 			findings = append(findings, Finding{
 				Pkg:      base,
-				Severity: Info,
-				Message:  fmt.Sprintf("SKIP checksum on %d line(s) — verify no real source is left unchecked", len(skipLines)),
+				Severity: severity,
+				Message:  message,
 				Location: fname + ":" + joinInts(skipLines),
 			})
 		}
 	}
 
-	if prevPB, ok := prev["PKGBUILD"]; ok {
-		findings = append(findings, hostDriftFindings(base, prevPB, files["PKGBUILD"])...)
+	prevPB, hadPrevPB := prev["PKGBUILD"]
+	curPB := files["PKGBUILD"]
+	findings = append(findings, checksumTrustFindings(base, prevPB, curPB, hadPrevPB)...)
+	if hadPrevPB {
+		findings = append(findings, hostDriftFindings(base, prevPB, curPB)...)
 	}
 	return findings, files
+}
+
+func isPGPKeyFile(name string) bool {
+	name = filepath.ToSlash(name)
+	if !strings.HasPrefix(name, "keys/pgp/") {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".asc", ".gpg", ".pgp":
+		return true
+	default:
+		return false
+	}
+}
+
+type checksumInspection struct {
+	strong    map[string]struct{}
+	weak      map[string]struct{}
+	skipCount int
+	skipLines []int
+	hasSource bool
+	pgpKeys   bool
+}
+
+func inspectChecksums(content string) checksumInspection {
+	inspection := checksumInspection{strong: map[string]struct{}{}, weak: map[string]struct{}{}}
+	for i, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if sourceAssignRE.MatchString(line) {
+			inspection.hasSource = true
+		}
+		if validPGPKeysRE.MatchString(line) {
+			inspection.pgpKeys = true
+		}
+		if matches := checksumAssignRE.FindStringSubmatch(line); matches != nil {
+			if matches[1] == "md5" || matches[1] == "sha1" {
+				inspection.weak[matches[1]] = struct{}{}
+			} else {
+				inspection.strong[matches[1]] = struct{}{}
+			}
+		}
+		if count := len(skipSumRE.FindAllString(line, -1)); count > 0 {
+			inspection.skipCount += count
+			inspection.skipLines = append(inspection.skipLines, i+1)
+		}
+	}
+	return inspection
+}
+
+func checksumTrustFindings(pkg, previous, current string, hadPrevious bool) []Finding {
+	prev := inspectChecksums(previous)
+	cur := inspectChecksums(current)
+	if !cur.hasSource {
+		return nil
+	}
+
+	var findings []Finding
+	downgraded := hadPrevious && len(prev.strong) > 0 && len(cur.strong) == 0
+	if downgraded {
+		findings = append(findings, Finding{
+			pkg, High, "strong checksum verification removed or downgraded", "PKGBUILD",
+		})
+	}
+	if len(cur.weak) > 0 && !downgraded && (!hadPrevious || len(prev.weak) == 0) {
+		findings = append(findings, Finding{
+			pkg, Warn, "weak checksum algorithm in use: " + strings.Join(slices.Sorted(maps.Keys(cur.weak)), ", "), "PKGBUILD",
+		})
+	}
+	if len(cur.strong) == 0 && len(cur.weak) == 0 && cur.skipCount == 0 && !cur.pgpKeys {
+		findings = append(findings, Finding{
+			pkg, Warn, "sources have no recognized checksum array or PGP key pinning", "PKGBUILD",
+		})
+	}
+	if hadPrevious && prev.pgpKeys && !cur.pgpKeys {
+		findings = append(findings, Finding{
+			pkg, Warn, "validpgpkeys pinning was removed", "PKGBUILD",
+		})
+	}
+	return findings
 }
 
 // hostDriftFindings compares the URL hosts referenced by the trusted PKGBUILD
@@ -646,6 +774,12 @@ func (r *Reviewer) fetchSnapshot(ctx context.Context, pkgbase string) (map[strin
 			return nil, nil, fmt.Errorf("snapshot read %s: %w", rel, err)
 		}
 		if bytes.IndexByte(b, 0) >= 0 {
+			// AUR's keys/pgp directory convention permits binary OpenPGP public
+			// keys even when they use an .asc suffix. Small key files are expected
+			// verification material; oversized files still take the warning path.
+			if isPGPKeyFile(rel) && len(b) <= 64<<10 {
+				continue
+			}
 			binaries = append(binaries, rel)
 			continue
 		}

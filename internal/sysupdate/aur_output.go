@@ -13,15 +13,17 @@ type aurOutputMode uint8
 const (
 	aurOutputCompact aurOutputMode = iota
 	aurOutputReview
-	aurOutputEdit
 )
 
-var aurSelectionLine = regexp.MustCompile(`^\s*\d+\s+\S+\s+.*(?:->|\([^)]*\))`)
+var (
+	aurSelectionLine       = regexp.MustCompile(`^\s*\d+\s+\S+\s+.*(?:->|\([^)]*\))`)
+	aurReviewSelectionLine = regexp.MustCompile(`^\s*\d+\s+\S+(?:\s|$)`)
+)
 
 // aurOutput keeps yay's complete output in the run log while reducing its
-// terminal stream to plans, interactive gates, promoted warnings, and
-// transient phase updates. Review pagers and editors are passed through until
-// yay resumes its build flow.
+// terminal stream to plans, the automatically selected build-file diffs,
+// interactive gates, promoted warnings, and transient phase updates. Diffs
+// are rendered inline so they remain visible before the install prompt.
 type aurOutput struct {
 	mu sync.Mutex
 
@@ -29,23 +31,27 @@ type aurOutput struct {
 	renderer Renderer
 	out      io.Writer
 
-	mode         aurOutputMode
-	pending      string
-	passPending  []byte
-	selections   []string
-	prompt       string
-	dependency   bool
-	installPlan  bool
-	packageName  string
-	warnings     map[string]struct{}
-	stopProgress func()
+	mode          aurOutputMode
+	pending       string
+	reviewPending string
+	selections    []string
+	prompt        string
+	dependency    bool
+	installPlan   bool
+	packageName   string
+	diffPackages  []string
+	diffPackage   string
+	diffFile      string
+	warnings      map[string]struct{}
+	stopProgress  func()
 }
 
-func newAUROutput(log io.Writer, renderer Renderer) *aurOutput {
+func newAUROutput(log io.Writer, renderer Renderer, diffPackages ...string) *aurOutput {
 	return &aurOutput{
 		log:          log,
 		renderer:     renderer,
 		out:          renderer.writer(),
+		diffPackages: append([]string(nil), diffPackages...),
 		warnings:     make(map[string]struct{}),
 		stopProgress: func() {},
 	}
@@ -66,9 +72,9 @@ func (w *aurOutput) Finish() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if len(w.passPending) > 0 {
-		_, _ = w.out.Write(w.passPending)
-		w.passPending = nil
+	if w.reviewPending != "" {
+		w.processReviewLine(w.reviewPending)
+		w.reviewPending = ""
 	}
 	if line := strings.TrimSpace(sanitizeTerminal(w.pending)); line != "" {
 		w.processLine(line)
@@ -81,7 +87,7 @@ func (w *aurOutput) Finish() {
 func (w *aurOutput) consume(p []byte) {
 	for len(p) > 0 {
 		if w.mode != aurOutputCompact {
-			p = w.consumePassthrough(p)
+			p = w.consumeReview(p)
 			continue
 		}
 
@@ -98,28 +104,42 @@ func (w *aurOutput) consume(p []byte) {
 	}
 }
 
-func (w *aurOutput) consumePassthrough(p []byte) []byte {
-	combined := append(w.passPending, p...)
-	w.passPending = nil
-	markers := []string{"==> PKGBUILDs to edit?"}
-	if w.mode == aurOutputEdit {
-		markers = []string{"==> Making package:", ":: Synchronizing package databases", ":: Parsing SRCINFO:", "Parsing SRCINFO:"}
+func (w *aurOutput) consumeReview(p []byte) []byte {
+	combined := []byte(w.reviewPending + string(p))
+	w.reviewPending = ""
+	markers := []string{
+		"==> PKGBUILDs to edit?", "==> Making package:",
+		":: Synchronizing package databases", ":: Parsing SRCINFO:", "Parsing SRCINFO:",
+		":: Proceed with install?", ":: Proceed with installation?",
 	}
-
 	if index := firstMarker(combined, markers); index >= 0 {
-		_, _ = w.out.Write(combined[:index])
+		w.processReviewBytes(combined[:index])
+		if w.reviewPending != "" {
+			w.processReviewLine(w.reviewPending)
+			w.reviewPending = ""
+		}
 		w.mode = aurOutputCompact
+		w.diffPackage = ""
+		w.diffFile = ""
 		return combined[index:]
 	}
 
-	keep := longestMarker(markers) - 1
-	if len(combined) <= keep {
-		w.passPending = combined
-		return nil
-	}
-	_, _ = w.out.Write(combined[:len(combined)-keep])
-	w.passPending = append(w.passPending, combined[len(combined)-keep:]...)
+	w.processReviewBytes(combined)
 	return nil
+}
+
+func (w *aurOutput) processReviewBytes(p []byte) {
+	for len(p) > 0 {
+		i := strings.IndexAny(string(p), "\r\n")
+		if i < 0 {
+			w.reviewPending += string(p)
+			return
+		}
+		w.reviewPending += string(p[:i])
+		w.processReviewLine(w.reviewPending)
+		w.reviewPending = ""
+		p = p[i+1:]
+	}
 }
 
 func firstMarker(p []byte, markers []string) int {
@@ -132,12 +152,59 @@ func firstMarker(p []byte, markers []string) int {
 	return first
 }
 
-func longestMarker(markers []string) int {
-	longest := 1
-	for _, marker := range markers {
-		longest = max(longest, len(marker))
+func (w *aurOutput) processReviewLine(raw string) {
+	line := sanitizeTerminal(raw)
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "diff --git ") {
+		pkg := w.diffPackageFromHeader(trimmed)
+		if pkg != "" && pkg != w.diffPackage {
+			w.diffPackage = pkg
+			w.diffFile = ""
+			w.renderer.DiffPackage(pkg)
+		}
+		file := diffFileFromHeader(trimmed, pkg)
+		if file != "" && file != w.diffFile {
+			w.diffFile = file
+			w.renderer.DiffFile(file)
+		}
+		return
 	}
-	return longest
+	if w.diffPackage == "" || trimmed == "" || aurReviewSelectionLine.MatchString(trimmed) || strings.HasPrefix(trimmed, "==>") {
+		return
+	}
+	if strings.HasPrefix(trimmed, "index ") || strings.HasPrefix(trimmed, "--- ") || strings.HasPrefix(trimmed, "+++ ") {
+		return
+	}
+	w.renderer.DiffLine(line)
+}
+
+func (w *aurOutput) diffPackageFromHeader(header string) string {
+	for _, pkg := range w.diffPackages {
+		if strings.Contains(header, "/"+pkg+"/") {
+			return pkg
+		}
+	}
+	if len(w.diffPackages) == 1 {
+		return w.diffPackages[0]
+	}
+	return "AUR package"
+}
+
+func diffFileFromHeader(header, pkg string) string {
+	if pkg != "" && pkg != "AUR package" {
+		marker := "/" + pkg + "/"
+		if i := strings.Index(header, marker); i >= 0 {
+			rest := header[i+len(marker):]
+			if fields := strings.Fields(rest); len(fields) > 0 {
+				return strings.Trim(fields[0], `"`)
+			}
+		}
+	}
+	fields := strings.Fields(header)
+	if len(fields) < 3 {
+		return ""
+	}
+	return strings.TrimPrefix(strings.Trim(fields[2], `"`), "a/")
 }
 
 func (w *aurOutput) processLine(raw string) {
@@ -149,6 +216,9 @@ func (w *aurOutput) processLine(raw string) {
 
 	if strings.HasPrefix(line, "==> WARNING:") {
 		message := strings.TrimSpace(strings.TrimPrefix(line, "==> WARNING:"))
+		if isRoutineAURWarning(message) {
+			return
+		}
 		if w.packageName != "" {
 			message = w.packageName + ": " + message
 		}
@@ -160,8 +230,8 @@ func (w *aurOutput) processLine(raw string) {
 		w.renderer.Error(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "==> ERROR:"), "error:")))
 		return
 	}
-	if w.prompt != "" && line == "==>" {
-		w.completeMenuPrompt(true)
+	if w.prompt != "" && strings.HasPrefix(line, "==>") && !strings.HasPrefix(line, "==> [") {
+		w.completeMenuPrompt()
 		return
 	}
 	if isInlineAURPrompt(line) {
@@ -182,13 +252,11 @@ func (w *aurOutput) processLine(raw string) {
 
 	if isAURMenuHeading(line) {
 		w.stopPhase()
-		w.flushSelections()
-		w.nativeLine(line)
+		w.selections = nil
 		w.prompt = line
 		return
 	}
 	if w.prompt != "" && strings.HasPrefix(line, "==> [") {
-		w.nativeLine(line)
 		return
 	}
 
@@ -227,6 +295,10 @@ func (w *aurOutput) processLine(raw string) {
 	}
 }
 
+func isRoutineAURWarning(message string) bool {
+	return strings.HasPrefix(message, "Using existing $srcdir/ tree")
+}
+
 func aurPackageName(line string) string {
 	const marker = "Making package:"
 	index := strings.Index(line, marker)
@@ -246,7 +318,7 @@ func (w *aurOutput) showPartialPrompt() {
 		return
 	}
 	if w.prompt != "" && strings.HasSuffix(line, "==>") {
-		w.completeMenuPrompt(false)
+		w.completeMenuPrompt()
 		w.pending = ""
 		return
 	}
@@ -259,19 +331,11 @@ func (w *aurOutput) showPartialPrompt() {
 	}
 }
 
-func (w *aurOutput) completeMenuPrompt(newline bool) {
-	if newline {
-		w.nativeLine("==>")
-	} else {
-		_, _ = fmt.Fprint(w.out, "  ==> ")
-	}
+func (w *aurOutput) completeMenuPrompt() {
 	prompt := w.prompt
 	w.prompt = ""
-	switch {
-	case strings.Contains(prompt, "Diffs to show?"):
+	if strings.Contains(prompt, "Diffs to show?") {
 		w.mode = aurOutputReview
-	case strings.Contains(prompt, "PKGBUILDs to edit?"):
-		w.mode = aurOutputEdit
 	}
 }
 

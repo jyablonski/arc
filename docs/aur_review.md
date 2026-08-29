@@ -1,27 +1,29 @@
 # Reviewing AUR updates
 
-`arc update system` summarizes pending AUR updates and points out changes worth extra attention. Yay still handles review prompts, dependency resolution, and builds. You decide whether to continue. Arc keeps routine source, compiler, test, and packaging output out of the terminal while showing important warnings and concise progress. Use `--log` to save the complete raw output to a private file.
+`arc update system` summarizes pending AUR updates, shows all PKGBUILD and related build-file diffs automatically, and points out changes worth extra attention. Arc disables yay's package-exclusion, clean-build, and PKGBUILD-edit menus for this invocation. You do not select diffs or press `A`; review what is shown and answer yay only when it presents a real install or dependency decision. Arc keeps routine source, compiler, test, and packaging output out of the terminal while showing important warnings and concise progress. Use `--log` to save the complete raw output to a private file.
 
 Arc trusts a reviewed snapshot only after the installed state matches the reviewed plan. A canceled or unsuccessful update remains flagged next time. See [platforms](platforms.md) for the checks and state locations.
 
-## Driving yay's diffmenu
+## Automatic diff review
 
-When `arc update system` invokes yay, it passes `--answerdiff All`, so yay chooses `All` for the diff menu instead of leaving the blank-response default at `[N]one` and skipping the review. The PKGBUILD edit menu remains interactive.
+Arc invokes yay with per-run overrides equivalent to `--answerupgrade None --cleanmenu=false --diffmenu --answerdiff All --editmenu=false`. These do not change your saved yay configuration. Arc hides yay's already-answered selection menu and renders every collected diff inline under a `diff · <package>` heading. Removed lines are red, added lines are green, and the complete diff remains in terminal scrollback before yay asks whether to install.
 
-When driving yay directly, at `Diffs to show?`:
+"Build-file diff" deliberately includes more than the literal `PKGBUILD`. AUR repositories can also contain `.install` scripts, hooks, patches, and local helpers; those files can carry the actual payload and must remain visible and scanned.
+
+When driving yay directly rather than through arc, at `Diffs to show?`:
 
 - `a` + Enter: show diffs for all packages
 - `1`, `1 3`, `1-3`: show diffs for specific packages by number
 - `^2`: show all except package 2
-- Enter alone: choose `[N]one`, which **skips the review entirely**. The capitalized option is the default, so pressing Enter without reading the prompt defeats the review.
+- Enter alone: choose `[N]one`, which **skips the review entirely**. This warning applies to direct yay usage; arc chooses all diffs automatically.
 
-Diffs open in your `$PAGER` (usually `less`). Press `q` to close the current diff and advance to the next one, and `/` to search. Press `Ctrl-C` at any yay prompt to abort without installing anything. Packages being built for the first time have no previous version to diff against, so yay shows the full PKGBUILD. Read it top to bottom once; future updates only need the diff.
+Press `Ctrl-C` at any yay prompt to abort without installing anything. Packages being built for the first time have no previous version to diff against, so yay shows the full PKGBUILD. Read it top to bottom once; future updates only need the diff.
 
-### If you hate the pager
+### When running yay directly
 
-The raw `less` view is the default, not the only option:
+Arc's inline rendering applies only to `arc update system`. Direct yay invocations use yay's configured pager:
 
-- **Better pager, zero yay changes.** yay pipes diffs through `$YAYPAGER` and falls back to `$PAGER`. For example, `export YAYPAGER='delta --side-by-side'` gives syntax-highlighted, side-by-side diffs. `bat -l diff` works too.
+- **Choose a pager.** yay uses its pager configuration and then `$PAGER`. For example, `PAGER=cat yay` keeps diffs inline, while `PAGER=less yay` uses an interactive pager.
 - **Read it in your editor instead.** When driving yay directly, answer `N` to `Diffs to show?` and pick packages at the `PKGBUILDs to edit?` prompt. Yay opens the files in `$EDITOR`. With `EDITOR='code --wait'` or `nvim`, close the editor window to continue. This shows the current files, not a diff.
 - **Inspect the clone yourself.** Yay keeps its checkouts in `~/.cache/yay/<pkgbase>/`, which is a plain Git repository. From another terminal, run `git -C ~/.cache/yay/cursor-bin log -p`, or open the repository in a Git GUI or diff tool.
 - **Browse it on the web.** Every package's history is public cgit: `https://aur.archlinux.org/cgit/aur.git/log/?h=<pkgbase>` shows each commit as a clickable diff in your browser.
@@ -65,7 +67,7 @@ Real AUR attacks are often surprisingly simple. The payload is usually visible i
 
 Look-alike domains (`github.com.cdn-dl.net`), a maintainer's "mirror", or a raw pastebin/gist URL replacing the vendor's domain all count. arc flags this HIGH as URL host drift. A *added* mirror alongside the original is more often benign but still deserves a look.
 
-**Checksum weakened instead of updated.** A hash replaced with `SKIP` (with no override), or `sha512sums` downgraded to `md5sums`, means the fetched source is no longer verified. Combined with a URL change, this can deliver an unverified payload:
+**Checksum weakened instead of updated.** A hash replaced with `SKIP` (with no override), a strong checksum removed or downgraded to MD5/SHA-1, or `validpgpkeys` pinning removed means source verification weakened. Arc compares these controls with the last trusted PKGBUILD: an increase in `SKIP` entries or loss of strong checksumming is HIGH, while a weak algorithm, missing verification, removed PGP-key pin, or unencrypted source URL is WARN. Combined with a URL change, this can deliver an unverified payload:
 
 ```diff
 -sha512sums=('77d98fdafef453c9b2e872929d1764b...')
@@ -94,7 +96,7 @@ The same applies to a new `npm install`, `pip install`, or `cargo install` for a
  }
 ```
 
-**The payload hides outside the PKGBUILD.** AUR repositories ship local files such as patches, `foo.sh` helpers, and `.desktop` files that the PKGBUILD applies or installs. A diff that adds quiet lines to `fix-build.patch` while the PKGBUILD barely changes deserves as much attention as the PKGBUILD itself. Arc scans the whole snapshot for this reason. New binary files are effectively unreviewable, so treat them as hostile until explained.
+**The payload hides outside the PKGBUILD.** AUR repositories ship local files such as patches, `foo.sh` helpers, and `.desktop` files that the PKGBUILD applies or installs. A diff that adds quiet lines to `fix-build.patch` while the PKGBUILD barely changes deserves as much attention as the PKGBUILD itself. Arc scans the whole snapshot for this reason. New binary files are effectively unreviewable, so treat them as hostile until explained. If the full snapshot cannot be fetched, arc explicitly warns that its limited PKGBUILD fallback may have missed related files.
 
 **Obfuscation.** There is no honest reason for a PKGBUILD to contain `base64 -d`, `eval` on a constructed string, hex-escaped blobs, or variables assembled character-by-character. Packaging is boring; anything that makes the diff *harder to read* is itself the finding:
 
@@ -103,7 +105,7 @@ The same applies to a new `npm install`, `pip install`, or `cargo install` for a
 +curl -s "$_x" -o /tmp/.cache && chmod +x /tmp/.cache && /tmp/.cache
 ```
 
-**Privilege and persistence touches.** `chmod +s` (setuid), writes to `/etc/systemd/`, `~/.bashrc`, `~/.config/autostart/`, cron entries, or `sudo` anywhere in build/install functions.
+**Privilege and persistence touches.** `chmod +s` or numeric setuid/setgid modes, `sudo`/`doas`, service activation, cron entries, reverse-shell primitives, writes to sensitive system/startup paths, and runtime `curl`/`wget`/VCS downloads are flagged automatically when they appear on new lines.
 
 **Context multipliers.** None of the above proves malice by itself, and the absence of these signals proves nothing. Arc's provenance findings help set the level of suspicion: a maintainer change or orphan adoption before the diff, one account taking over several packages, or a `pkgrel`-only bump with unexplained file changes. A new maintainer's first push deserves extra scrutiny; a routine bump from a long-time maintainer usually needs less.
 
@@ -114,6 +116,6 @@ The same applies to a new `npm install`, `pip install`, or `cargo install` for a
 3. Any new network access in `prepare()`/`build()`/`package()`?
 4. Any new or changed `.install`, hook, patch, or local script? Read those hunks too.
 5. Does anything require effort to read? Obfuscation is a red flag by itself.
-6. Cross-check arc's pre-yay findings: maintainer/adoption flags raise the bar for everything above.
+6. Cross-check arc's findings: maintainer/adoption flags raise the bar for everything above.
 
-When in doubt, press `Ctrl-C`. Nothing installs, and the package stays flagged. Arc commits its trusted baseline only after a yay run succeeds, so a rejected diff appears again in full on the next update.
+When in doubt, answer `n` at the install prompt or press `Ctrl-C`. Nothing installs, and the package stays flagged. Arc commits its trusted baseline only after a yay run succeeds and the installed versions match the reviewed plan, so a rejected diff appears again on the next update.

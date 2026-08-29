@@ -24,8 +24,9 @@ type PackageChange struct {
 }
 
 type Renderer struct {
-	Out   io.Writer
-	Width int
+	Out        io.Writer
+	Width      int
+	ForceColor bool
 }
 
 func (r Renderer) writer() io.Writer {
@@ -72,6 +73,47 @@ func (r Renderer) Error(message string) {
 
 func (r Renderer) Info(message string) {
 	_, _ = fmt.Fprintf(r.writer(), "  · %s\n", message)
+}
+
+func (r Renderer) DiffPackage(name string) {
+	r.Blank()
+	heading := "diff · " + name
+	_, _ = fmt.Fprintf(r.writer(), "  %s\n  %s\n", r.ansi("\x1b[1;36m", heading), strings.Repeat("─", visibleRunes(heading)))
+}
+
+func (r Renderer) DiffFile(name string) {
+	_, _ = fmt.Fprintf(r.writer(), "    %s\n", r.ansi("\x1b[1m", name))
+}
+
+func (r Renderer) DiffLine(line string) {
+	style := ""
+	switch {
+	case strings.HasPrefix(line, "+"):
+		style = "\x1b[32m"
+	case strings.HasPrefix(line, "-"):
+		style = "\x1b[31m"
+	case strings.HasPrefix(line, "@@"):
+		style = "\x1b[36m"
+	}
+	_, _ = fmt.Fprintf(r.writer(), "    %s\n", r.ansi(style, line))
+}
+
+func (r Renderer) ansi(style, value string) string {
+	if style == "" || !r.colorEnabled() {
+		return value
+	}
+	return style + value + "\x1b[0m"
+}
+
+func (r Renderer) colorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	if r.ForceColor {
+		return true
+	}
+	f, ok := r.Out.(*os.File)
+	return ok && isTerminal(f)
 }
 
 // Progress writes a transient line only for an interactive terminal. The
