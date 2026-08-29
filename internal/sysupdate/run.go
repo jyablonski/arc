@@ -92,13 +92,18 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 		if d.CheckYayAvailable() {
 			// Triage before yay builds anything; the baseline is committed only
 			// when the installed result matches the reviewed plan, so a takeover
-			// rejected at the diffmenu stays flagged on the next run.
+			// rejected at an install gate stays flagged on the next run.
 			result, runYay := runAURReview(d, renderer)
 			if runYay {
-				renderer.Info("yay review prompts follow; build details stay in the log")
-				yayArgs := []string{"-Syu", "--aur", "--diffmenu", "--editmenu", "--answerdiff", "All", "--noansweredit"}
+				yayArgs := []string{
+					"-Syu", "--aur",
+					"--answerupgrade", "None",
+					"--cleanmenu=false",
+					"--diffmenu", "--answerdiff", "All",
+					"--editmenu=false",
+				}
 				yayLogStart := log.command("yay", yayArgs...)
-				yayOutput := newAUROutput(log.Writer(), renderer)
+				yayOutput := newAUROutput(log.Writer(), renderer, aurPackageBases(result)...)
 				err := d.RunLogged(yayOutput, false, "yay", yayArgs...)
 				yayOutput.Finish()
 				if err != nil {
@@ -292,7 +297,13 @@ func printAURReview(renderer Renderer, result *aurreview.Result, ignored []ignor
 	for _, pkg := range ignored {
 		renderer.Warning(fmt.Sprintf("%s %s ignored by IgnorePkg", pkg.Name, pkg.Version))
 	}
-	if len(result.Findings) == 0 {
+	actionable := make([]aurreview.Finding, 0, len(result.Findings))
+	for _, finding := range result.Findings {
+		if finding.Severity >= aurreview.Warn {
+			actionable = append(actionable, finding)
+		}
+	}
+	if len(actionable) == 0 {
 		if len(result.Updates) == 0 {
 			detail := "no updates pending"
 			if len(ignored) > 0 {
@@ -300,22 +311,42 @@ func printAURReview(renderer Renderer, result *aurreview.Result, ignored []ignor
 			}
 			renderer.Result("review", detail, 0)
 		} else {
-			renderer.Result("review", "no notable findings", 0)
+			renderer.Result("review", "no suspicious changes detected", 0)
 		}
 		return
 	}
-	renderer.Info("review findings (most severe first)")
-	for _, f := range result.Findings {
-		line := fmt.Sprintf("[%s] %s: %s", f.Severity, f.Pkg, f.Message)
+	renderer.Warning(fmt.Sprintf("%d suspicious %s detected", len(actionable), plural(len(actionable), "change", "changes")))
+	for _, f := range actionable {
+		line := fmt.Sprintf("%s: %s", f.Pkg, f.Message)
 		if f.Location != "" {
 			line += " (" + f.Location + ")"
 		}
-		if f.Severity == aurreview.Info {
-			renderer.Info(line)
+		if f.Severity == aurreview.High {
+			renderer.Error(line)
 		} else {
 			renderer.Warning(line)
 		}
 	}
+}
+
+func aurPackageBases(result *aurreview.Result) []string {
+	if result == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(result.Updates))
+	for _, update := range result.Updates {
+		base := update.PackageBase
+		if base == "" {
+			base = update.Name
+		}
+		seen[base] = struct{}{}
+	}
+	bases := make([]string, 0, len(seen))
+	for base := range seen {
+		bases = append(bases, base)
+	}
+	sort.Strings(bases)
+	return bases
 }
 
 func aurSummary(updates, ignored int) string {
