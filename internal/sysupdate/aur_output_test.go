@@ -2,6 +2,7 @@ package sysupdate
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -165,6 +166,68 @@ func TestAUROutput_newlineTerminatedApprovalEndsInstallPlan(t *testing.T) {
 	require.Contains(t, terminal.String(), "Proceed with installation? [Y/n]")
 	require.NotContains(t, terminal.String(), "checking keyring")
 	require.NotContains(t, terminal.String(), "checking package integrity")
+}
+
+func TestAUROutput_installPromptAfterDiffIsVisibleBeforeInput(t *testing.T) {
+	for _, prompt := range []struct{ name, raw, want string }{
+		{"plain", ":: Proceed with install? [Y/n] ", ":: Proceed with install? [Y/n]"},
+		{"colored install", "\x1b[1m\x1b[36m:: \x1b[0m\x1b[1mProceed with install?\x1b[0m \x1b[1m[Y/n]\x1b[0m ", ":: Proceed with install? [Y/n]"},
+		{"colored installation", "\x1b[1m\x1b[36m:: \x1b[0m\x1b[1mProceed with installation?\x1b[0m [Y/n] ", ":: Proceed with installation? [Y/n]"},
+	} {
+		// yay leaves the prompt unterminated and blocks on stdin, so the gate has
+		// to reach the terminal without a trailing newline to flush it.
+		for _, size := range []int{1, 5, 4096} {
+			t.Run(fmt.Sprintf("%s/chunk=%d", prompt.name, size), func(t *testing.T) {
+				var log, terminal bytes.Buffer
+				reduced := newAUROutput(&log, Renderer{Out: &terminal}, "foo")
+				raw := "==> Diffs to show?\n==> [N]one [A]ll [Ab]ort\n==> A\n" +
+					"diff --git a/PKGBUILD b/PKGBUILD\n-pkgver=1\n+pkgver=2\n" + prompt.raw
+				writeInChunks(t, reduced, []byte(raw), size)
+
+				// Assert before more subprocess output or Finish can flush a hidden prompt.
+				want := "\n  diff · foo\n  ──────────\n    PKGBUILD\n    -pkgver=1\n    +pkgver=2\n" +
+					"  " + prompt.want + " "
+				require.Equal(t, want, terminal.String())
+				require.Equal(t, raw, log.String())
+				reduced.Finish()
+				require.Equal(t, want, terminal.String())
+			})
+		}
+	}
+}
+
+func TestAUROutput_countedSRCINFOEndsReview(t *testing.T) {
+	var terminal bytes.Buffer
+	reduced := newAUROutput(io.Discard, Renderer{Out: &terminal}, "foo")
+	// The install prompt normally ends the review; SRCINFO parsing is the
+	// fallback when it is skipped, and yay counts that line.
+	raw := "==> Diffs to show?\n==> [N]one [A]ll [Ab]ort\n==> A\n" +
+		"diff --git a/PKGBUILD b/PKGBUILD\n-pkgver=1\n+pkgver=2\n" +
+		":: (1/1) Parsing SRCINFO: foo\nnoisy parser output\n"
+	writeInChunks(t, reduced, []byte(raw), 5)
+	reduced.Finish()
+
+	require.Equal(t, "\n  diff · foo\n  ──────────\n    PKGBUILD\n    -pkgver=1\n    +pkgver=2\n", terminal.String())
+}
+
+func TestAUROutput_promptTextInDiffRemainsVisible(t *testing.T) {
+	var terminal bytes.Buffer
+	reduced := newAUROutput(io.Discard, Renderer{Out: &terminal}, "foo")
+	raw := "==> Diffs to show?\n==> [N]one [A]ll [Ab]ort\n==> A\n" +
+		"diff --git a/PKGBUILD b/PKGBUILD\n" +
+		"-echo ':: Proceed with install? [Y/n]'\n" +
+		"+echo '==> Making package: foo'\n" +
+		" :: Proceed with install? [Y/n]\n" +
+		"+pkgver=2\n" +
+		"\x1b[36m:: \x1b[0mProceed with install? [Y/n] "
+	writeInChunks(t, reduced, []byte(raw), 5)
+
+	require.Equal(t, "\n  diff · foo\n  ──────────\n    PKGBUILD\n"+
+		"    -echo ':: Proceed with install? [Y/n]'\n"+
+		"    +echo '==> Making package: foo'\n"+
+		"     :: Proceed with install? [Y/n]\n"+
+		"    +pkgver=2\n"+
+		"  :: Proceed with install? [Y/n] ", terminal.String())
 }
 
 func TestAUROutput_promotesErrors(t *testing.T) {

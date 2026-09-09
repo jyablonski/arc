@@ -18,6 +18,8 @@ const (
 var (
 	aurSelectionLine       = regexp.MustCompile(`^\s*\d+\s+\S+\s+.*(?:->|\([^)]*\))`)
 	aurReviewSelectionLine = regexp.MustCompile(`^\s*\d+\s+\S+(?:\s|$)`)
+	// yay counts its operations inline, e.g. ":: (1/1) Parsing SRCINFO: foo".
+	aurOperationCounter = regexp.MustCompile(`^:: \(\d+/\d+\) `)
 )
 
 // aurOutput keeps yay's complete output in the run log while reducing its
@@ -105,51 +107,47 @@ func (w *aurOutput) consume(p []byte) {
 }
 
 func (w *aurOutput) consumeReview(p []byte) []byte {
-	combined := []byte(w.reviewPending + string(p))
-	w.reviewPending = ""
-	markers := []string{
-		"==> PKGBUILDs to edit?", "==> Making package:",
-		":: Synchronizing package databases", ":: Parsing SRCINFO:", "Parsing SRCINFO:",
-		":: Proceed with install?", ":: Proceed with installation?",
-	}
-	if index := firstMarker(combined, markers); index >= 0 {
-		w.processReviewBytes(combined[:index])
-		if w.reviewPending != "" {
-			w.processReviewLine(w.reviewPending)
-			w.reviewPending = ""
-		}
-		w.mode = aurOutputCompact
-		w.diffPackage = ""
-		w.diffFile = ""
-		return combined[index:]
-	}
-
-	w.processReviewBytes(combined)
-	return nil
-}
-
-func (w *aurOutput) processReviewBytes(p []byte) {
 	for len(p) > 0 {
 		i := strings.IndexAny(string(p), "\r\n")
 		if i < 0 {
-			w.reviewPending += string(p)
-			return
+			i = len(p)
 		}
 		w.reviewPending += string(p[:i])
+		p = p[i:]
+
+		// Match sanitized text, but retain raw bytes so split escape sequences
+		// and unterminated prompts survive the handoff to compact mode.
+		if isAURReviewEnd(sanitizeTerminal(w.reviewPending)) {
+			w.mode = aurOutputCompact
+			w.diffPackage = ""
+			w.diffFile = ""
+			p = append([]byte(w.reviewPending), p...)
+			w.reviewPending = ""
+			return p
+		}
+		if len(p) == 0 {
+			return nil
+		}
 		w.processReviewLine(w.reviewPending)
 		w.reviewPending = ""
-		p = p[i+1:]
+		p = p[1:]
 	}
+	return nil
 }
 
-func firstMarker(p []byte, markers []string) int {
-	first := -1
-	for _, marker := range markers {
-		if index := strings.Index(string(p), marker); index >= 0 && (first < 0 || index < first) {
-			first = index
+func isAURReviewEnd(line string) bool {
+	line = aurOperationCounter.ReplaceAllString(line, "")
+	for _, marker := range []string{
+		"==> PKGBUILDs to edit?", "==> Making package:",
+		":: Synchronizing package databases", ":: Parsing SRCINFO:", "Parsing SRCINFO:",
+		":: Proceed with install?", ":: Proceed with installation?",
+	} {
+		// Diff content has a leading space, '+' or '-'; it must stay in the review.
+		if strings.HasPrefix(line, marker) {
+			return true
 		}
 	}
-	return first
+	return false
 }
 
 func (w *aurOutput) processReviewLine(raw string) {
