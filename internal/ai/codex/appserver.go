@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"sort"
 	"strings"
 	"time"
 
@@ -151,18 +150,8 @@ func decodeRateLimitsResult(raw json.RawMessage) (ai.UsageReport, error) {
 	var windows []ai.UsageWindow
 	extra := map[string]any{}
 
-	if len(res.RateLimitsByLimitID) > 0 {
-		ids := make([]string, 0, len(res.RateLimitsByLimitID))
-		for id := range res.RateLimitsByLimitID {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-		for _, id := range ids {
-			b := res.RateLimitsByLimitID[id]
-			windows = append(windows, windowsFromBucket(b)...)
-		}
-	} else if res.RateLimits != nil {
-		windows = append(windows, windowsFromBucket(*res.RateLimits)...)
+	if b, ok := codexRateLimitBucket(res); ok {
+		windows = append(windows, windowsFromBucket(b)...)
 	}
 
 	if res.RateLimits != nil && res.RateLimits.RateLimitReachedType != nil {
@@ -172,12 +161,22 @@ func decodeRateLimitsResult(raw json.RawMessage) (ai.UsageReport, error) {
 	return ai.UsageReport{Windows: windows, Extra: extra}, nil
 }
 
+func codexRateLimitBucket(res rateLimitsReadResult) (rateLimitBucket, bool) {
+	if b, ok := res.RateLimitsByLimitID["codex"]; ok {
+		return b, true
+	}
+	if res.RateLimits != nil && (res.RateLimits.LimitID == "" || res.RateLimits.LimitID == "codex") {
+		return *res.RateLimits, true
+	}
+	return rateLimitBucket{}, false
+}
+
 func windowsFromBucket(b rateLimitBucket) []ai.UsageWindow {
 	var out []ai.UsageWindow
 	if b.Primary != nil {
 		t := time.Unix(b.Primary.ResetsAt, 0).UTC()
 		out = append(out, ai.UsageWindow{
-			Label:       "5 hour",
+			Label:       rateWindowLabel(b.Primary.WindowDurationMins, "5 hour"),
 			PercentUsed: b.Primary.UsedPercent,
 			ResetsAt:    &t,
 		})
@@ -185,10 +184,30 @@ func windowsFromBucket(b rateLimitBucket) []ai.UsageWindow {
 	if b.Secondary != nil {
 		t := time.Unix(b.Secondary.ResetsAt, 0).UTC()
 		out = append(out, ai.UsageWindow{
-			Label:       "weekly",
+			Label:       rateWindowLabel(b.Secondary.WindowDurationMins, "weekly"),
 			PercentUsed: b.Secondary.UsedPercent,
 			ResetsAt:    &t,
 		})
 	}
 	return out
+}
+
+func rateWindowLabel(minutes int, fallback string) string {
+	switch minutes {
+	case 300:
+		return "5 hour"
+	case 10080:
+		return "weekly"
+	case 0:
+		return fallback
+	default:
+		switch {
+		case minutes%1440 == 0:
+			return fmt.Sprintf("%d day", minutes/1440)
+		case minutes%60 == 0:
+			return fmt.Sprintf("%d hour", minutes/60)
+		default:
+			return fmt.Sprintf("%d min", minutes)
+		}
+	}
 }

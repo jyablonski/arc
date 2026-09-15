@@ -179,14 +179,14 @@ func (p *Provider) fetchOAuthUsage(ctx context.Context, client *http.Client, bea
 	sort.Strings(keys)
 	for _, key := range keys {
 		val := raw[key]
-		if key == "extra_usage" || strings.HasPrefix(key, "_") {
+		if key == "extra_usage" || strings.HasPrefix(key, "_") || !isUsageBucketKey(key) {
 			continue
 		}
 		var b oauthBucket
 		if err := json.Unmarshal(val, &b); err != nil {
 			continue
 		}
-		if b.Utilization == nil && b.ResetsAt == nil {
+		if b.Utilization == nil {
 			continue
 		}
 		w := ai.UsageWindow{Label: humanizeBucketKey(key)}
@@ -212,6 +212,10 @@ func (p *Provider) fetchOAuthUsage(ctx context.Context, client *http.Client, bea
 	}
 
 	return ai.UsageReport{Windows: windows, Extra: extra}, resp.StatusCode, body, nil
+}
+
+func isUsageBucketKey(k string) bool {
+	return k == "five_hour" || k == "seven_day" || strings.HasPrefix(k, "seven_day_")
 }
 
 func humanizeBucketKey(k string) string {
