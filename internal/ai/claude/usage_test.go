@@ -47,6 +47,7 @@ func TestProvider_Usage_httptest(t *testing.T) {
 	require.Len(t, rep.Windows, 2)
 	require.Equal(t, "5 hour", rep.Windows[0].Label)
 	require.InDelta(t, 33.0, rep.Windows[0].PercentUsed, 1e-9)
+	require.Equal(t, "7 day (all models)", rep.Windows[1].Label)
 }
 
 func TestProvider_Usage_refreshAfter401(t *testing.T) {

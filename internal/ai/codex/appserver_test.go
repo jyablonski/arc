@@ -29,21 +29,38 @@ func TestDecodeRateLimitsResult(t *testing.T) {
 func TestDecodeRateLimitsResult_byLimitID(t *testing.T) {
 	raw := json.RawMessage(`{
 	  "rateLimitsByLimitId": {
-	    "a": {
-	      "limitId": "a",
-	      "primary": { "usedPercent": 5, "windowDurationMins": 300, "resetsAt": 1730947200 }
+	    "codex": {
+	      "limitId": "codex",
+	      "primary": { "usedPercent": 5, "windowDurationMins": 10080, "resetsAt": 1730947200 },
+	      "secondary": { "usedPercent": 7, "windowDurationMins": 300, "resetsAt": 1730947300 }
 	    },
-	    "b": {
-	      "limitId": "b",
-	      "primary": { "usedPercent": 7, "windowDurationMins": 300, "resetsAt": 1730947300 }
+	    "codex_bengalfox": {
+	      "limitId": "codex_bengalfox",
+	      "primary": { "usedPercent": 100, "windowDurationMins": 10080, "resetsAt": 1730947400 }
 	    }
 	  }
-	}`)
+}`)
 	rep, err := decodeRateLimitsResult(raw)
 	require.NoError(t, err)
 	require.Len(t, rep.Windows, 2)
-	require.Equal(t, "5 hour", rep.Windows[0].Label)
+	require.Equal(t, "weekly", rep.Windows[0].Label)
 	require.InDelta(t, 5.0, rep.Windows[0].PercentUsed, 1e-9)
+	require.Equal(t, "5 hour", rep.Windows[1].Label)
+	require.InDelta(t, 7.0, rep.Windows[1].PercentUsed, 1e-9)
+}
+
+func TestDecodeRateLimitsResult_usesWindowDurationForLabels(t *testing.T) {
+	raw := json.RawMessage(`{
+	  "rateLimits": {
+	    "limitId": "codex",
+	    "primary": { "usedPercent": 25, "windowDurationMins": 10080, "resetsAt": 1730947200 },
+	    "secondary": { "usedPercent": 10, "windowDurationMins": 300, "resetsAt": 1730947300 }
+	  }
+}`)
+	rep, err := decodeRateLimitsResult(raw)
+	require.NoError(t, err)
+	require.Equal(t, "weekly", rep.Windows[0].Label)
+	require.Equal(t, "5 hour", rep.Windows[1].Label)
 }
 
 func TestDecodeRateLimitsResult_extraReachedType(t *testing.T) {
