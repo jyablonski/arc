@@ -125,39 +125,9 @@ arc mcp sync
 
 Run `arc <command> --help` for flags and detailed behavior.
 
-## Design notes
-
-- Native tools first: `arc` delegates platform-specific work to the package manager and system utilities already installed on the machine.
-- Local state by default: configuration, session history, token accounting, and usage statistics are stored locally. Commands that fetch live provider usage or pricing make network requests when needed.
-- Canonical configuration: shared skills, rules, and MCP configuration have one source of truth under `~/ai/`; provider-specific files are updated from that source.
-- AUR review: before yay runs, `arc update system` checks pending AUR updates for takeover signals and scans changed package files for high-signal patterns. See [AUR review](docs/aur_review.md).
-
 ## Documentation
 
-- [AUR review](docs/aur_review.md)
-- [AI usage](docs/ai_usage.md)
-- [AI tokens](docs/ai_tokens.md)
-- [AI sessions](docs/ai_sessions.md)
-- [AI health](docs/ai_health.md)
-- [AI pricing](docs/ai_pricing.md)
-- [Incident alerts](docs/incident.md)
-- [Local usage statistics](docs/stats.md)
-- [Shared skills](docs/skills.md)
-- [Shared rules](docs/rules.md)
-- [MCP configuration](docs/mcp.md)
-- [Platform behavior](docs/platforms.md)
-
-## Development
-
-Requires Go 1.27.0.
-
-```bash
-make build
-make install
-go test ./...
-make fmt
-make lint
-```
+See the [docs](docs/) folder for detailed documentation on each command and workflow.
 
 ## License
 
