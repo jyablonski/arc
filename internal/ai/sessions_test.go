@@ -85,3 +85,32 @@ func TestExitErrorIfAllSessionProvidersFailed_allFail(t *testing.T) {
 	err := ExitErrorIfAllSessionProvidersFailed(report)
 	require.Error(t, err)
 }
+
+func TestRunSessionProviders_hidesAutomatedSessionsByDefault(t *testing.T) {
+	codex := fakeSessionProvider("codex", []SessionSummary{
+		{Provider: "codex", SessionID: "human", Model: "gpt-5.6-luna", LastAt: ts("2026-06-03T10:00:00Z")},
+		{Provider: "codex", SessionID: "bot", Model: "codex-auto-review", LastAt: ts("2026-06-04T10:00:00Z")},
+	}, nil)
+
+	report := RunSessionProviders(context.Background(), []SessionProvider{codex}, nil, SessionOptions{})
+	require.Len(t, report.Sessions, 1)
+	require.Equal(t, "human", report.Sessions[0].SessionID)
+	require.Equal(t, 1, report.HiddenAutomated)
+	require.Equal(t, 1, report.Matched)
+
+	all := RunSessionProviders(context.Background(), []SessionProvider{codex}, nil, SessionOptions{IncludeAutomated: true})
+	require.Len(t, all.Sessions, 2)
+	require.Zero(t, all.HiddenAutomated)
+}
+
+func TestRunSessionProviders_matchedCountsBeforeLimit(t *testing.T) {
+	codex := fakeSessionProvider("codex", []SessionSummary{
+		{Provider: "codex", SessionID: "a", LastAt: ts("2026-06-03T10:00:00Z")},
+		{Provider: "codex", SessionID: "b", LastAt: ts("2026-06-02T10:00:00Z")},
+		{Provider: "codex", SessionID: "c", LastAt: ts("2026-06-01T10:00:00Z")},
+	}, nil)
+
+	report := RunSessionProviders(context.Background(), []SessionProvider{codex}, nil, SessionOptions{Limit: 1})
+	require.Len(t, report.Sessions, 1)
+	require.Equal(t, 3, report.Matched)
+}

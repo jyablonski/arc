@@ -43,7 +43,7 @@ After changing versions, run `go mod tidy`, `go mod verify`, `go test ./...`, `p
 - `internal/brew` — Homebrew helpers for macOS package commands
 - `internal/pacman` — pacman helpers for Linux package commands
 - `internal/sysupdate` — Linux `arc update system` workflow
-- `internal/aurreview` — pre-yay AUR takeover triage (provenance baseline, snapshot diff scan, cluster detection); state under `~/.local/state/arc/`. See `docs/aur_review.md`.
+- `internal/aurreview` — pre-yay AUR takeover triage (provenance baseline, snapshot diff scan, cluster detection) plus per-package change classification and unified diffs against the last trusted snapshot (`classify.go`); state under `~/.local/state/arc/`. See `docs/aur_review.md`.
 - `internal/mcp` — `arc mcp` shared MCP server config (see below)
 - `internal/gitcleanup` — `arc git cleanup` logic
 - `internal/selfupdate` — `arc update self`
@@ -55,9 +55,19 @@ New command: new file under `cmd/`, register in `init()`, add the path string to
 
 Output: `internal/output` (`Info`, `Warning`, `Table`, …). JSON: global `-j` / `--json` on the root command.
 
+## Output grammar (`internal/output`)
+
+`render.go` holds the shared grammar every human-readable command inherits; build on it instead of hand-rolling alignment.
+
+- **One rule character** (`─`) and **one glyph set** with fixed meanings: `✓` done/in sync, `⚠` needs a human, `·` informational, `✗` failed, `≠` drifted. `Style` resolves them, plus color, terminal width, and an ASCII path (`ARC_ASCII=1`, `TERM=dumb`, or a non-UTF-8 locale).
+- **`Screen`** is a command's output: a `Title` with right-aligned `Meta`, a rule, a body, and a closing summary line. Every right edge in a screen ends at the same column (`FrameWidth` 76, growing to at most `MaxFrameWidth` 120).
+- **`Grid`** is the canonical table: lowercase faint headers aligned exactly like their cells, a two-space gutter, no underline rule, per-column `Align` (glyph columns are `AlignCenter`, numbers `AlignRight`), and at most one `Flex` column that absorbs the remaining width. `Screen.Notes` renders callouts with their state, subject, and resolving command in aligned columns.
+- **One formatter each** for sizes (`Bytes`), durations (`Duration`), relative ages (`Age`), and timestamps (`Timestamp`, 24-hour).
+- **Every command self-identifies and ends with one line.** `arc update system`, `arc ai usage`, `arc ai sessions`, `arc mcp list`, and `arc skills list` follow this; new commands should too. `mcp list` and `skills list` also expose `--check` (verdict line + non-zero exit on drift).
+
 ## Updates
 
-- `arc update system` — Linux: pacman / yay / cache (`--no-aur`, `--no-cache`); macOS: Homebrew update / upgrade / cleanup (`--no-cache`)
+- `arc update system` — Linux: pacman / yay / cache (`--no-aur`, `--no-cache`, `--diff`, `-v`); macOS: Homebrew update / upgrade / cleanup (`--no-cache`). One arc-worded gate per section. After the AUR gate, `internal/sysupdate.aurOutput` owns yay's stdin (`Deps.RunAUR`, `shell.RunWithInput`) and answers yay's and pacman's install gates itself **only** while the transaction matches the approved plan; anything outside it, and any prompt arc does not recognise, is surfaced to the user. Unterminated question-shaped output is surfaced after a short delay so a proxied prompt can never deadlock.
 - `arc update self` — upgrade the `arc` binary (`internal/selfupdate`)
 - `arc update uv` — `uv self update`
 

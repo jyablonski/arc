@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -31,7 +32,6 @@ func testForeignPackageUpgrade() func() (map[string]string, error) {
 
 func TestRunWithDeps_yayPathAndPaccache(t *testing.T) {
 	var yayCall []string
-	var yayVisible bool
 	deps := testDepsKernelStable(t)
 	var out bytes.Buffer
 	deps.Out = &out
@@ -42,31 +42,69 @@ func TestRunWithDeps_yayPathAndPaccache(t *testing.T) {
 	}
 	deps.CommitAUR = func(*aurreview.Result) error { return nil }
 	var calls [][]string
-	deps.RunLogged = func(log io.Writer, visible bool, name string, args ...string) error {
+	deps.RunLogged = func(_ io.Writer, _ bool, name string, args ...string) error {
 		calls = append(calls, append([]string{name}, args...))
-		if name == "yay" {
-			yayCall = append([]string{name}, args...)
-			yayVisible = visible
-			_, err := io.WriteString(log, "==> WARNING: captured warning\nnoisy build output\n")
-			return err
-		}
 		return nil
 	}
+	deps.RunAUR = func(out io.Writer, _ *os.File, name string, args ...string) error {
+		yayCall = append([]string{name}, args...)
+		_, err := io.WriteString(out, "==> WARNING: captured warning\nnoisy build output\n")
+		return err
+	}
+	deps.Stdin = stdinWith(t, "y\n")
 
 	require.NoError(t, RunWithDeps(deps, Options{}))
 	require.Equal(t, []string{
 		"yay", "-Syu", "--aur",
 		"--answerupgrade", "None",
 		"--cleanmenu=false",
-		"--diffmenu", "--answerdiff", "All",
 		"--editmenu=false",
+		// arc reviewed the build files itself, so yay's diff menu stays off.
+		"--diffmenu=false",
 	}, yayCall)
-	require.False(t, yayVisible, "yay output must pass through the reducer rather than mirror directly")
 	require.Contains(t, calls, []string{"sudo", "paccache", "-rv"})
 	require.Contains(t, out.String(), "captured warning")
 	require.NotContains(t, out.String(), "noisy build output")
-	require.Contains(t, out.String(), "no suspicious changes detected")
-	require.NotContains(t, out.String(), "all AUR build-file diffs follow automatically")
+	require.Contains(t, out.String(), "Upgrade 1 AUR package? [Y/n]")
+}
+
+func TestRunWithDeps_aurDeclinedSkipsYay(t *testing.T) {
+	deps := testDepsKernelStable(t)
+	var out bytes.Buffer
+	deps.Out = &out
+	deps.Stdin = stdinWith(t, "n\n")
+	deps.CheckYayAvailable = func() bool { return true }
+	deps.ForeignPackages = testForeignPackageUpgrade()
+	deps.ReviewAUR = func(context.Context, map[string]string) (*aurreview.Result, error) {
+		return testPendingAURResult(), nil
+	}
+	ranYay, committed := false, false
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error { ranYay = true; return nil }
+	deps.CommitAUR = func(*aurreview.Result) error { committed = true; return nil }
+
+	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
+	require.False(t, ranYay)
+	require.False(t, committed, "a declined upgrade must not advance the trusted baseline")
+	require.Contains(t, out.String(), "AUR upgrade skipped")
+	require.Contains(t, out.String(), "AUR declined")
+}
+
+func TestRunWithDeps_highFindingFlipsThePromptDefault(t *testing.T) {
+	deps := testDepsKernelStable(t)
+	var out bytes.Buffer
+	deps.Out = &out
+	deps.Stdin = stdinWith(t, "\n")
+	deps.CheckYayAvailable = func() bool { return true }
+	deps.ForeignPackages = testForeignPackageUpgrade()
+	res := testPendingAURResult()
+	res.Findings = []aurreview.Finding{{Pkg: "foo", Severity: aurreview.High, Message: "pipe-to-shell", Location: "PKGBUILD:3"}}
+	deps.ReviewAUR = func(context.Context, map[string]string) (*aurreview.Result, error) { return res, nil }
+	ranYay := false
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error { ranYay = true; return nil }
+
+	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
+	require.Contains(t, out.String(), "Upgrade 1 AUR package? [y/N]")
+	require.False(t, ranYay, "Enter declines when the review found a high-signal change")
 }
 
 func TestPrintAURReview_hidesInformationalNoise(t *testing.T) {
@@ -79,9 +117,9 @@ func TestPrintAURReview_hidesInformationalNoise(t *testing.T) {
 		},
 	}
 
-	printAURReview(Renderer{Out: &out, Width: 60}, result, nil, time.Unix(0, 0))
+	printAURReview(Renderer{Out: &out, Width: 76}, result, nil, time.Unix(0, 0), false)
 
-	require.Contains(t, out.String(), "no suspicious changes detected")
+	require.Contains(t, out.String(), "no build logic changed")
 	require.NotContains(t, out.String(), "unencrypted source URL")
 	require.NotContains(t, out.String(), "SKIP checksum")
 }
@@ -96,7 +134,7 @@ func TestPrintAURReview_keepsSuspiciousFindings(t *testing.T) {
 		},
 	}
 
-	printAURReview(Renderer{Out: &out, Width: 60}, result, nil, time.Unix(0, 0))
+	printAURReview(Renderer{Out: &out, Width: 76}, result, nil, time.Unix(0, 0), false)
 
 	require.Contains(t, out.String(), "2 suspicious changes detected")
 	require.Contains(t, out.String(), "✗ foo: pipe-to-shell (PKGBUILD:10)")
@@ -147,12 +185,7 @@ func TestRunWithDeps_aurReviewExcludesIgnoredPackages(t *testing.T) {
 		return &aurreview.Result{}, nil
 	}
 	deps.CommitAUR = func(result *aurreview.Result) error { committed = result; return nil }
-	deps.RunLogged = func(_ io.Writer, _ bool, name string, _ ...string) error {
-		if name == "yay" {
-			ranYay = true
-		}
-		return nil
-	}
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error { ranYay = true; return nil }
 	var out bytes.Buffer
 	deps.Out = &out
 
@@ -174,16 +207,11 @@ func TestRunWithDeps_allAURPackagesIgnoredSkipsYay(t *testing.T) {
 	var out bytes.Buffer
 	deps.Out = &out
 	var ranYay bool
-	deps.RunLogged = func(_ io.Writer, _ bool, name string, _ ...string) error {
-		if name == "yay" {
-			ranYay = true
-		}
-		return nil
-	}
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error { ranYay = true; return nil }
 
 	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
 	require.False(t, ranYay)
-	require.Contains(t, out.String(), "spotify 1.0 ignored by IgnorePkg")
+	require.Contains(t, out.String(), "· spotify             held at 1.0")
 	require.Contains(t, out.String(), "no eligible updates")
 }
 
@@ -198,12 +226,7 @@ func TestRunWithDeps_aurReviewNoCommitOnYayFailure(t *testing.T) {
 	}
 	var committed bool
 	deps.CommitAUR = func(*aurreview.Result) error { committed = true; return nil }
-	deps.RunLogged = func(_ io.Writer, _ bool, name string, args ...string) error {
-		if name == "yay" {
-			return errors.New("boom")
-		}
-		return nil
-	}
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error { return errors.New("boom") }
 
 	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
 	require.False(t, committed)
@@ -243,12 +266,9 @@ func TestRunWithDeps_yayFailsContinues(t *testing.T) {
 		return testPendingAURResult(), nil
 	}
 	var ranYay bool
-	deps.RunLogged = func(_ io.Writer, _ bool, name string, args ...string) error {
-		if name == "yay" {
-			ranYay = true
-			return errors.New("yay boom")
-		}
-		return nil
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error {
+		ranYay = true
+		return errors.New("yay boom")
 	}
 
 	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
@@ -271,7 +291,7 @@ func TestAURResultMismatches_regularAndVCS(t *testing.T) {
 func TestPublishedAgo(t *testing.T) {
 	now := time.Unix(1_000_000_000, 0)
 	require.Equal(t, "", publishedAgo(now, 0))
-	require.Equal(t, "published 28m ago", publishedAgo(now, now.Add(-28*time.Minute).Unix()))
-	require.Equal(t, "published 6h ago", publishedAgo(now, now.Add(-6*time.Hour).Unix()))
-	require.Equal(t, "published 3d ago", publishedAgo(now, now.Add(-72*time.Hour).Unix()))
+	require.Equal(t, "28m ago", publishedAgo(now, now.Add(-28*time.Minute).Unix()))
+	require.Equal(t, "6h ago", publishedAgo(now, now.Add(-6*time.Hour).Unix()))
+	require.Equal(t, "3d ago", publishedAgo(now, now.Add(-72*time.Hour).Unix()))
 }

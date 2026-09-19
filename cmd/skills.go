@@ -16,9 +16,13 @@ var (
 	skillsAddNew      string
 	skillsValidateFix bool
 	skillsDryRun      bool
+	skillsListCheck   bool
 )
 
-var ErrSkillsConflict = errors.New("skills: unresolved conflicts")
+var (
+	ErrSkillsConflict = errors.New("skills: unresolved conflicts")
+	ErrSkillsDrift    = errors.New("skills: provider links out of sync")
+)
 
 var skillsCmd = &cobra.Command{
 	Use:   "skills",
@@ -111,6 +115,14 @@ reported as conflicts and never overwritten.`,
 var skillsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List canonical skills and their per-provider status",
+	Long: `Shows every canonical skill with one column per provider.
+
+Cells: ✓ linked to canonical, · not linked yet, ≠ links somewhere else,
+⚠ real files where the link belongs, ✗ dangling link. Skills present in a
+provider but not in ~/ai/skills are listed as unmanaged.
+
+Use --check for a single line and a non-zero exit when any link is out of
+sync (for shell prompts and cron).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		m := newManager()
 		res, err := m.List()
@@ -118,12 +130,22 @@ var skillsListCmd = &cobra.Command{
 			return err
 		}
 		jsonOut, _ := cmd.Flags().GetBool("json")
-		if jsonOut {
+		providers := skills.Providers(skills.DefaultPaths())
+		switch {
+		case jsonOut:
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			return enc.Encode(res)
+			if err := enc.Encode(res); err != nil {
+				return err
+			}
+		case skillsListCheck:
+			fmt.Println(skills.CheckLine(output.StyleFor(os.Stdout), len(providers), res))
+		default:
+			skills.PrintListHuman(os.Stdout, providers, res)
 		}
-		skills.PrintListHuman(os.Stdout, skills.Providers(skills.DefaultPaths()), res)
+		if skillsListCheck && res.Issues() > 0 {
+			return ErrSkillsDrift
+		}
 		return nil
 	},
 }
@@ -199,6 +221,7 @@ func init() {
 
 	skillsAddCmd.Flags().BoolVar(&skillsAddForce, "force", false, "Overwrite existing canonical skill")
 	skillsAddCmd.Flags().StringVar(&skillsAddNew, "new", "", "Scaffold a new skill with this name instead of promoting a draft")
+	skillsListCmd.Flags().BoolVar(&skillsListCheck, "check", false, "Print one verdict line and exit non-zero on drift")
 	skillsValidateCmd.Flags().BoolVar(&skillsValidateFix, "fix", false, "Auto-rename canonical dir on name/dir mismatch")
 
 	skillsCmd.PersistentFlags().BoolVar(&skillsDryRun, "dry-run", false, "Print planned actions without modifying the filesystem")

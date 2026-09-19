@@ -1,34 +1,18 @@
 package presentation
 
 import (
+	"bytes"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/fatih/color"
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/stretchr/testify/require"
 )
-
-func TestCompactDurationRemain(t *testing.T) {
-	require.Equal(t, "30m", compactDurationRemain(30*time.Minute))
-	require.Equal(t, "5h 0m", compactDurationRemain(5*time.Hour))
-	require.Equal(t, "5h 30m", compactDurationRemain(5*time.Hour+30*time.Minute))
-	require.Equal(t, "2d 3h", compactDurationRemain(51*time.Hour))
-	require.Equal(t, "12d", compactDurationRemain(12*24*time.Hour))
-}
-
-func TestPctRemainingForDisplay(t *testing.T) {
-	require.Equal(t, -1.0, pctRemainingForDisplay(-1))
-	require.InDelta(t, 100, pctRemainingForDisplay(0), 0.001)
-	require.InDelta(t, 72, pctRemainingForDisplay(28), 0.001)
-	require.InDelta(t, 24.6, pctRemainingForDisplay(75.4), 0.05)
-	require.InDelta(t, 0, pctRemainingForDisplay(100), 0.001)
-	require.InDelta(t, 0, pctRemainingForDisplay(150), 0.001)
-}
 
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
@@ -75,81 +59,70 @@ func (s *syncBuffer) String() string {
 	return string(s.buf)
 }
 
-func TestPrintAggregate_successAndFormatting(t *testing.T) {
+func renderUsage(t *testing.T, agg ai.AggregateReport, opts UsageOptions) string {
+	t.Helper()
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	var buf bytes.Buffer
+	PrintUsage(&buf, agg, opts)
+	return buf.String()
+}
+
+func TestPrintUsage_oneTableAcrossProviders(t *testing.T) {
 	now := time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC)
 	reset := now.Add(3 * time.Hour)
-	out := captureStdout(t, func() {
-		PrintAggregate(ai.AggregateReport{
-			FetchedAt: now,
-			Providers: []ai.ProviderResult{
-				{
-					Name: "claude",
-					OK:   true,
-					Report: ai.UsageReport{
-						Windows: []ai.UsageWindow{{Label: "5 hour", PercentUsed: 33.3, ResetsAt: &reset}},
-					},
-				},
-			},
-		})
-	})
-	require.Contains(t, out, "Claude")
-	require.Contains(t, out, "5 hour")
-	require.Contains(t, out, "window")
-	require.Contains(t, out, "% left")
-	require.Contains(t, out, "●")
+	out := renderUsage(t, ai.AggregateReport{
+		FetchedAt: now,
+		Providers: []ai.ProviderResult{
+			{Name: "claude", OK: true, Report: ai.UsageReport{Windows: []ai.UsageWindow{
+				{Label: "5 hour", PercentUsed: 0},
+				{Label: "7 day (all models)", PercentUsed: 3, ResetsAt: &reset},
+			}}},
+			{Name: "codex", OK: true, Report: ai.UsageReport{Windows: []ai.UsageWindow{{Label: "weekly", PercentUsed: 1, ResetsAt: &reset}}}},
+		},
+	}, UsageOptions{Now: now})
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	require.True(t, strings.HasPrefix(lines[0], "arc ai usage"))
+	require.True(t, strings.HasSuffix(lines[0], "2026-05-06 14:00:00"))
+	require.Equal(t, "provider  window  used              left  resets", lines[3])
+	require.Equal(t, "claude    5 hour  ░░░░░░░░░░░░░░░░  100%  not started", lines[4])
+	require.Equal(t, "claude    7 day   ▓░░░░░░░░░░░░░░░   97%  in 3h 0m", lines[5], "bar fills with what is consumed")
+	require.Equal(t, "codex     7 day   ▓░░░░░░░░░░░░░░░   99%  in 3h 0m", lines[6])
+	require.Equal(t, "✓ all windows clear · tightest is claude 7 day at 97% left", lines[len(lines)-1])
 }
 
-func TestPrintAggregate_providerErrors(t *testing.T) {
-	out := captureStdout(t, func() {
-		PrintAggregate(ai.AggregateReport{
-			Providers: []ai.ProviderResult{
-				{Name: "codex", OK: false, Error: "offline", Hint: "install codex"},
-			},
-		})
-	})
-	require.Contains(t, out, "offline")
-	require.Contains(t, out, "install codex")
-	require.Contains(t, out, "Codex")
+func TestPrintUsage_short(t *testing.T) {
+	out := renderUsage(t, ai.AggregateReport{Providers: []ai.ProviderResult{
+		{Name: "claude", OK: true, Report: ai.UsageReport{Windows: []ai.UsageWindow{{Label: "5 hour", PercentUsed: 3}, {Label: "7 day (all models)", PercentUsed: 1}}}},
+	}}, UsageOptions{Short: true})
+	require.Equal(t, "✓ 2/2 windows clear · tightest claude 5 hour 97%\n", out)
 }
 
-func TestPrintAggregate_emptyWindowsMessage(t *testing.T) {
-	out := captureStdout(t, func() {
-		PrintAggregate(ai.AggregateReport{
-			Providers: []ai.ProviderResult{
-				{Name: "cursor", OK: true, Report: ai.UsageReport{}},
-			},
-		})
-	})
-	require.Contains(t, out, "no usage windows returned")
-	require.Contains(t, out, "Cursor")
+func TestPrintUsage_lowWindowWarns(t *testing.T) {
+	out := renderUsage(t, ai.AggregateReport{Providers: []ai.ProviderResult{
+		{Name: "claude", OK: true, Report: ai.UsageReport{Windows: []ai.UsageWindow{{Label: "5 hour", PercentUsed: 92.5}}}},
+		{Name: "codex", OK: false, Error: "offline", Hint: "install codex"},
+	}}, UsageOptions{Short: true})
+	require.Equal(t, "⚠ 1 window low · tightest claude 5 hour 7.5% · codex unavailable\n", out)
 }
 
-func TestCapitalizeAndPadRunes_unexportedViaBehavior(t *testing.T) {
-	require.Equal(t, "", capitalize(""))
-	require.Equal(t, "Hello", capitalize("hello"))
-	require.Equal(t, "abc…", padRunes("abcdefghijklmnopqrstuvwxyz01234567890xx", 4))
-	require.Equal(t, "", padRunes("ab", 1))
-	padded := padRunes("hi", 10)
-	require.Equal(t, 10, utf8.RuneCountInString(padded))
-	require.True(t, padded[:2] == "hi")
+func TestPrintUsage_providerErrors(t *testing.T) {
+	out := renderUsage(t, ai.AggregateReport{Providers: []ai.ProviderResult{
+		{Name: "codex", OK: false, Error: "offline", Hint: "install codex"},
+		{Name: "cursor", OK: true},
+	}}, UsageOptions{})
+	// Provider, message and hint each get a column, the same callout shape
+	// `arc mcp list` and `arc skills list` use.
+	require.Contains(t, out, "✗ codex   offline                    install codex")
+	require.Contains(t, out, "· cursor  no usage windows returned")
+	require.Contains(t, out, "✗ no usage available")
 }
 
-func TestAlignPercentCell_renderRemainBar_formatRemainPercentHuman(t *testing.T) {
-	accent := providerAccent("codex")
-	require.Contains(t, alignPercentCell("99.9%"), "99.9%")
-	require.Contains(t, renderRemainBar(accent, 50, 10), "●")
-	require.Contains(t, renderRemainBar(accent, -1, 10), "·")
-
-	green := color.New(color.FgGreen)
-	require.Contains(t, formatRemainPercentHuman(25, green), "75.0%")
-	require.Contains(t, formatRemainPercentHuman(-1, green), "—")
+func TestLeftPercent(t *testing.T) {
+	require.Equal(t, "100%", leftPercent(0))
+	require.Equal(t, "99%", leftPercent(0.4), "any consumption reads below 100%")
+	require.Equal(t, "72%", leftPercent(28))
+	require.Equal(t, "7.5%", leftPercent(92.5))
+	require.Equal(t, "0.0%", leftPercent(150))
 }
-
-func TestFormatResetHuman(t *testing.T) {
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	require.Equal(t, "-", formatResetHuman(nil, now))
-	require.Equal(t, "now", formatResetHuman(ptrAt(now.Add(-time.Minute)), now))
-	require.Contains(t, formatResetHuman(ptrAt(now.Add(90*time.Minute)), now), "m")
-}
-
-func ptrAt(tm time.Time) *time.Time { return &tm }

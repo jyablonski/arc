@@ -656,3 +656,24 @@ func TestDefaultStatePath_xdg(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/tmp/xdgstate/arc/aur-provenance.json", p)
 }
+
+func TestReview_unfetchableFilesCarryAVerdict(t *testing.T) {
+	// The RPC reports an update, but every file fetch 500s, so nothing was
+	// compared. An absent classification must never read as "nothing changed".
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	rv := newReviewer(statePath, func(req *http.Request) (*http.Response, error) {
+		if strings.Contains(req.URL.Path, "/rpc/") {
+			return jsonResp(http.StatusOK, `{"type":"multiinfo","resultcount":1,"results":[
+				{"Name":"foo","PackageBase":"foo","Version":"2.0","Maintainer":"m","LastModified":99}]}`), nil
+		}
+		return jsonResp(http.StatusInternalServerError, ""), nil
+	})
+
+	res, err := rv.Review(t.Context(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	require.Len(t, res.Updates, 1)
+	change, ok := res.Changes["foo"]
+	require.True(t, ok, "a package arc tried to scan always carries a verdict")
+	require.False(t, change.Routine)
+	require.Equal(t, "build files unavailable", change.Summary)
+}

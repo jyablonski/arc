@@ -3,7 +3,10 @@ package ai
 import "time"
 
 type UsageWindow struct {
+	// Label is the provider's own name for the window; Window is arc's
+	// normalized name for it (see NormalizeWindows).
 	Label       string     `json:"label"`
+	Window      string     `json:"window,omitempty"`
 	PercentUsed float64    `json:"percent_used"`
 	ResetsAt    *time.Time `json:"resets_at,omitempty"`
 	Detail      string     `json:"detail,omitempty"`

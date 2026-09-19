@@ -30,6 +30,8 @@ func (linuxManager) UpdateSystem(opts UpdateOptions) error {
 		SkipCache: opts.SkipCache,
 		AssumeYes: opts.AssumeYes,
 		Log:       opts.Log,
+		Verbose:   opts.Verbose,
+		ShowDiff:  opts.ShowDiff,
 	})
 }
 

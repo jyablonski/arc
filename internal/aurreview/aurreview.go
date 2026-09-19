@@ -7,8 +7,10 @@
 //     flagged, including checksum weakening and privilege/persistence signals
 //  3. cross-package cluster detection (one account touching many at once)
 //
-// It NEVER decides for you. It surfaces findings and routes your attention;
-// you still make the call at yay's install prompt. Pattern-based scanning has false
+// It NEVER decides for you. It surfaces findings, classifies each package's
+// change (see classify.go) so routine version bumps read as one line, and
+// routes your attention; you still make the call at arc's AUR prompt. A HIGH
+// finding only flips that prompt's default to "no". Pattern-based scanning has false
 // positives (e.g. a SKIP sum that's overridden on the next line) and is
 // defeated by obfuscation, so treat HIGH findings as "look here first",
 // not "reject".
@@ -192,6 +194,10 @@ func New(statePath string) *Reviewer {
 type Result struct {
 	Findings []Finding
 	Updates  []Update
+	// Changes classifies each rescanned pkgbase's file changes since the last
+	// trusted snapshot. A pkgbase with a pending update but no entry was not
+	// pushed to since it was last trusted.
+	Changes  map[string]Change
 	baseline map[string]provenance
 	files    map[string]map[string]string // pkgbase -> filename -> content, for the snapshot cache
 }
@@ -325,6 +331,7 @@ func (r *Reviewer) Review(ctx context.Context, installed map[string]string) (*Re
 
 	scanFindings := make([][]Finding, len(targets))
 	scanFiles := make([]map[string]string, len(targets))
+	scanChanges := make([]Change, len(targets))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, scanWorkers)
 	for i, info := range targets {
@@ -332,13 +339,23 @@ func (r *Reviewer) Review(ctx context.Context, installed map[string]string) (*Re
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			scanFindings[i], scanFiles[i] = r.scanPackage(ctx, info)
+			if scanFiles[i] != nil {
+				scanChanges[i] = classify(r.loadCache(info.PackageBase), scanFiles[i])
+			} else {
+				// The files could not be fetched, so nothing was compared.
+				// Saying so is the point: an absent classification must never
+				// be mistaken for "nothing changed".
+				scanChanges[i] = Change{Summary: "build files unavailable"}
+			}
 		})
 	}
 	wg.Wait()
 
 	files := map[string]map[string]string{}
+	changes := map[string]Change{}
 	for i, info := range targets {
 		findings = append(findings, scanFindings[i]...)
+		changes[info.PackageBase] = scanChanges[i]
 		if scanFiles[i] != nil {
 			files[info.PackageBase] = scanFiles[i]
 		}
@@ -362,7 +379,7 @@ func (r *Reviewer) Review(ctx context.Context, installed map[string]string) (*Re
 		return findings[i].Severity > findings[j].Severity
 	})
 	sort.Slice(updates, func(i, j int) bool { return updates[i].Name < updates[j].Name })
-	return &Result{Findings: findings, Updates: updates, baseline: baseline, files: files}, nil
+	return &Result{Findings: findings, Updates: updates, Changes: changes, baseline: baseline, files: files}, nil
 }
 
 // Commit persists the baseline and file snapshots observed during Review. Run

@@ -50,12 +50,28 @@ type SessionOptions struct {
 	Until  *time.Time
 	Limit  int
 	Search string
+	// IncludeAutomated keeps machine-generated sessions (e.g. Codex
+	// auto-review) that are otherwise hidden and only counted.
+	IncludeAutomated bool
+}
+
+// automatedModels are session models that only ever run as a side effect of
+// another session; they are never something a person resumes.
+var automatedModels = map[string]bool{"codex-auto-review": true}
+
+// IsAutomated reports whether s was started by a tool rather than a person.
+func (s SessionSummary) IsAutomated() bool {
+	return automatedModels[s.Model]
 }
 
 type SessionReport struct {
 	FetchedAt time.Time               `json:"fetched_at"`
 	Providers []SessionProviderResult `json:"providers"`
 	Sessions  []SessionSummary        `json:"sessions"`
+	// Matched counts sessions that passed the filters before --limit.
+	Matched int `json:"matched"`
+	// HiddenAutomated counts automated sessions left out of Sessions.
+	HiddenAutomated int `json:"hidden_automated"`
 }
 
 // RunSessionProviders gathers sessions from each selected provider, isolating
@@ -95,6 +111,10 @@ func RunSessionProviders(ctx context.Context, providers []SessionProvider, filte
 		if opts.Search != "" && !sessionMatches(s, opts.Search) {
 			continue
 		}
+		if !opts.IncludeAutomated && s.IsAutomated() {
+			report.HiddenAutomated++
+			continue
+		}
 		filtered = append(filtered, s)
 	}
 
@@ -109,6 +129,7 @@ func RunSessionProviders(ctx context.Context, providers []SessionProvider, filte
 		return a.SessionID < b.SessionID
 	})
 
+	report.Matched = len(filtered)
 	if opts.Limit > 0 && len(filtered) > opts.Limit {
 		filtered = filtered[:opts.Limit]
 	}

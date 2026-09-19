@@ -179,7 +179,7 @@ func TestRunAIUsage_printsROIWhenConfigured(t *testing.T) {
 		err := rootCmd.Execute()
 		require.NoError(t, err)
 	})
-	require.Contains(t, out, "Subscription ROI")
+	require.Contains(t, out, "subscription ROI")
 	require.Contains(t, out, "codex")
 	require.Contains(t, out, "$1.25")
 	require.Contains(t, out, "$1.00")

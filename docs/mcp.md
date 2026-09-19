@@ -106,17 +106,22 @@ Show every canonical configuration entry with one column per provider:
 
 ```bash
 arc mcp list
+arc mcp list --check   # one line, non-zero exit on drift
 ```
 
-| Status        | Meaning                                                        |
-| ------------- | -------------------------------------------------------------- |
-| `ok`          | present and matching canonical                                 |
-| `missing`     | belongs here but has not been written yet                      |
-| `drift`       | `arc` owns it and it was edited elsewhere; sync will overwrite |
-| `conflict`    | configured by hand and differs; sync leaves it alone           |
-| `unsupported` | this provider's dialect cannot express it                      |
-| `disabled`    | disabled in canonical and correctly absent                     |
-| `excluded`    | restricted to other providers                                  |
+Each provider cell is a glyph, and every non-`ok` cell is explained underneath with the command that resolves it. The `set` column reports whether the entry's `{env:VAR}` references exist in the current shell — the most likely reason a server that lists fine fails at runtime.
+
+| Cell | Status        | Meaning                                                        |
+| ---- | ------------- | -------------------------------------------------------------- |
+| `✓`  | `ok`          | present and matching canonical                                 |
+| `·`  | `missing`     | belongs here but has not been written yet                      |
+| `≠`  | `drift`       | `arc` owns it and it was edited elsewhere; sync will overwrite |
+| `⚠`  | `conflict`    | configured by hand and differs; sync leaves it alone           |
+| `✗`  | `unsupported` | this provider's dialect cannot express it                      |
+| `·`  | `disabled`    | disabled in canonical and correctly absent                     |
+| `·`  | `excluded`    | restricted to other providers                                  |
+
+`--json` carries the full status names. `--check` prints only the verdict line and exits non-zero when any entry is `missing`, `drift`, or `conflict`, so it can drive a shell prompt or a cron check.
 
 Add an MCP configuration entry and sync it out in one step. This writes configuration only; it does not create or start an MCP server:
 

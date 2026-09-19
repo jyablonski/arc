@@ -43,8 +43,19 @@ type ConflictBackup struct {
 }
 
 type ListResult struct {
+	Root      string           `json:"root"`
 	Skills    []SkillEntry     `json:"skills"`
 	Conflicts []ConflictBackup `json:"conflicts"`
+	// Unmanaged are skills present in a provider but not in canonical.
+	Unmanaged []UnmanagedSkill `json:"unmanaged,omitempty"`
+}
+
+// UnmanagedSkill is a provider slot arc does not manage: a skill someone
+// installed straight into one tool.
+type UnmanagedSkill struct {
+	Provider string `json:"provider"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
 }
 
 type ValidationIssue struct {
@@ -456,7 +467,7 @@ func (m *Manager) Prune() (int, error) {
 }
 
 func (m *Manager) List() (ListResult, error) {
-	var res ListResult
+	res := ListResult{Root: m.paths.SkillsRoot}
 
 	names, err := m.canonicalSkills()
 	if err != nil {
@@ -479,7 +490,37 @@ func (m *Manager) List() (ListResult, error) {
 	}
 
 	res.Conflicts = m.conflictBackups()
+	res.Unmanaged = m.unmanagedSkills(names)
 	return res, nil
+}
+
+// unmanagedSkills lists provider slots with no canonical counterpart. Hidden
+// entries (tool-bundled skills such as Codex's .system), real directories in a
+// SharedDir (Cursor's bundled skills), and conflict backups are not candidates
+// for adoption.
+func (m *Manager) unmanagedSkills(canonical []string) []UnmanagedSkill {
+	known := make(map[string]bool, len(canonical))
+	for _, n := range canonical {
+		known[n] = true
+	}
+	var out []UnmanagedSkill
+	for _, p := range m.providers {
+		entries, err := os.ReadDir(p.SkillsDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if known[name] || name[0] == '.' || conflictRe.MatchString(name) {
+				continue
+			}
+			if p.SharedDir && e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			out = append(out, UnmanagedSkill{Provider: p.Name, Name: name, Path: filepath.Join(p.SkillsDir, name)})
+		}
+	}
+	return out
 }
 
 func slotStatus(slot, canonical string) Status {
@@ -740,28 +781,126 @@ func contains(hay []string, needle string) bool {
 }
 
 func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
+	style := output.StyleFor(w)
+	meta := output.Count(len(res.Skills), "skill", "skills")
+	if res.Root != "" {
+		meta += style.Sep() + output.TildePath(res.Root)
+	}
+	sc := &output.Screen{W: w, Style: style, Title: "arc skills list", Meta: meta}
 	if len(res.Skills) == 0 {
-		_, _ = fmt.Fprintln(w, "no skills found in canonical dir")
+		sc.Flush(style.Glyph(output.GlyphInfo) + " no skills found" + style.Sep() + style.Faint("arc skills add --new <name>"))
 		return
 	}
-	headers := []string{"name", "canonical"}
+
+	grid := output.Grid{Columns: []output.Column{{Header: "name"}}}
 	for _, p := range providers {
-		headers = append(headers, p.Name)
+		grid.Columns = append(grid.Columns, output.Column{Header: p.Name, Align: output.AlignCenter})
 	}
-	rows := make([][]string, 0, len(res.Skills))
 	for _, e := range res.Skills {
-		row := []string{e.Name, e.CanonicalPath}
+		row := []string{e.Name}
 		for _, p := range providers {
-			row = append(row, string(e.Providers[p.Name]))
+			row = append(row, statusGlyph(style, e.Providers[p.Name]))
 		}
-		rows = append(rows, row)
+		grid.Rows = append(grid.Rows, row)
 	}
-	output.FprintTable(w, headers, rows)
-	if len(res.Conflicts) > 0 {
-		_, _ = fmt.Fprintln(w)
-		_, _ = fmt.Fprintln(w, "Conflict backups (manual review):")
-		for _, c := range res.Conflicts {
-			_, _ = fmt.Fprintf(w, "  %s (%s)\n", c.Path, c.Provider)
+	sc.Grid(grid)
+
+	arrow := style.Sym("›", ">")
+	var notes []output.Note
+	for _, e := range res.Skills {
+		for _, p := range providers {
+			st := e.Providers[p.Name]
+			if st == StatusOK {
+				continue
+			}
+			notes = append(notes, output.Note{Glyph: glyphFor(st), Label: statusMeaning[st],
+				Detail: fmt.Sprintf("%s %s %s", p.Name, arrow, e.Name), Hint: statusHint[st]})
 		}
 	}
+	for _, c := range res.Conflicts {
+		notes = append(notes, output.Note{Glyph: output.GlyphWarn, Label: "conflict backup",
+			Detail: output.TildePath(c.Path), Hint: "review, then delete"})
+	}
+	if n := len(res.Unmanaged); n > 0 {
+		label := fmt.Sprintf("%d unmanaged", n)
+		for _, u := range res.Unmanaged {
+			notes = append(notes, output.Note{Glyph: output.GlyphWarn, Label: label,
+				Detail: fmt.Sprintf("%s %s %s", u.Provider, arrow, u.Name), Hint: "arc skills add " + output.TildePath(u.Path)})
+			label = ""
+		}
+	}
+	if len(notes) > 0 {
+		sc.Blank()
+		sc.Notes(notes)
+	}
+	sc.Flush(CheckLine(style, len(providers), res))
+}
+
+// Issues counts provider slots that are not in sync with canonical.
+func (r ListResult) Issues() int {
+	n := 0
+	for _, e := range r.Skills {
+		for _, st := range e.Providers {
+			if st != StatusOK {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// CheckLine is the one-line verdict shared by the list footer and --check.
+func CheckLine(style output.Style, providers int, res ListResult) string {
+	sep := style.Sep()
+	if len(res.Skills) == 0 {
+		return style.Glyph(output.GlyphInfo) + " no skills found" + sep + style.Faint("arc skills add --new <name>")
+	}
+	issues := res.Issues()
+	if issues == 0 {
+		line := style.Glyph(output.GlyphOK) + " " + fmt.Sprintf("%s in sync across %s",
+			output.Count(len(res.Skills), "skill", "skills"), output.Count(providers, "provider", "providers"))
+		if n := len(res.Unmanaged); n > 0 {
+			line += sep + fmt.Sprintf("%d unmanaged", n)
+		}
+		return line
+	}
+	return style.Glyph(output.GlyphWarn) + " " + fmt.Sprintf("%s out of sync", output.Count(issues, "slot", "slots")) +
+		sep + style.Faint("arc skills sync")
+}
+
+// statusMeaning is the plain-language reading of each non-ok cell.
+var statusMeaning = map[Status]string{
+	StatusMissing:  "not linked",
+	StatusConflict: "real files where the link belongs",
+	StatusExternal: "links somewhere other than canonical",
+	StatusDangling: "link target is missing",
+}
+
+// statusHint names the command that actually resolves each state. Sync links
+// empty slots and replaces dangling links, but deliberately leaves real files
+// and symlinks pointing outside canonical alone, so those need a human first.
+var statusHint = map[Status]string{
+	StatusMissing:  "arc skills sync",
+	StatusConflict: "move it aside, then arc skills sync",
+	StatusExternal: "remove the link, then arc skills sync",
+	StatusDangling: "arc skills sync",
+}
+
+func glyphFor(st Status) output.Glyph {
+	switch st {
+	case StatusOK:
+		return output.GlyphOK
+	case StatusMissing:
+		return output.GlyphInfo
+	case StatusExternal:
+		return output.GlyphDrift
+	case StatusDangling:
+		return output.GlyphFail
+	default:
+		return output.GlyphWarn
+	}
+}
+
+func statusGlyph(style output.Style, st Status) string {
+	return style.Glyph(glyphFor(st))
 }

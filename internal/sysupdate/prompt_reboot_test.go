@@ -3,6 +3,7 @@ package sysupdate
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestPromptReboot_skipsWhenNo(t *testing.T) {
 		return nil
 	}
 
-	require.NoError(t, promptReboot(f, runInteractive))
+	require.NoError(t, promptReboot(NewRenderer(io.Discard, false), f, runInteractive))
 }
 
 func TestPromptReboot_runsRebootWhenYes(t *testing.T) {
@@ -49,7 +50,7 @@ func TestPromptReboot_runsRebootWhenYes(t *testing.T) {
 		return fmt.Errorf("unexpected: %s %v", name, args)
 	}
 
-	require.NoError(t, promptReboot(f, runInteractive))
+	require.NoError(t, promptReboot(NewRenderer(io.Discard, false), f, runInteractive))
 	require.True(t, saw)
 }
 
@@ -59,7 +60,7 @@ func TestPromptReboot_readError(t *testing.T) {
 	require.NoError(t, w.Close())
 	t.Cleanup(func() { _ = r.Close() })
 
-	err = promptReboot(r, func(string, ...string) error { return nil })
+	err = promptReboot(NewRenderer(io.Discard, false), r, func(string, ...string) error { return nil })
 	require.Error(t, err)
 	require.Contains(t, strings.ToLower(err.Error()), "read")
 }
@@ -67,7 +68,7 @@ func TestPromptReboot_readError(t *testing.T) {
 func TestPromptReboot_sudoRebootFails(t *testing.T) {
 	f := stdinWith(t, "y\n")
 
-	err := promptReboot(f, func(string, ...string) error {
+	err := promptReboot(NewRenderer(io.Discard, false), f, func(string, ...string) error {
 		return errors.New("permission denied")
 	})
 	require.Error(t, err)

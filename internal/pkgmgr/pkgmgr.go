@@ -13,6 +13,8 @@ type UpdateOptions struct {
 	SkipCache bool
 	AssumeYes bool
 	Log       bool
+	Verbose   bool
+	ShowDiff  bool
 }
 
 type CleanOptions struct {

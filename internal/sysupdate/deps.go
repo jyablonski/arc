@@ -13,10 +13,12 @@ import (
 
 // Deps is injectable state for [RunWithDeps]; unset fields use [DefaultDeps].
 type Deps struct {
-	CheckPacman       func() error
-	KernelVersions    func() (map[string]string, error)
-	RunInteractive    func(name string, args ...string) error
-	RunLogged         func(log io.Writer, visible bool, name string, args ...string) error
+	CheckPacman    func() error
+	KernelVersions func() (map[string]string, error)
+	RunInteractive func(name string, args ...string) error
+	RunLogged      func(log io.Writer, visible bool, name string, args ...string) error
+	// RunAUR runs yay with stdin owned by arc so it can answer install gates.
+	RunAUR            func(out io.Writer, stdin *os.File, name string, args ...string) error
 	CheckYayAvailable func() bool
 	Stdin             *os.File
 	Out               io.Writer
@@ -39,6 +41,7 @@ func DefaultDeps() Deps {
 		KernelVersions:    pacman.InstalledKernelVersions,
 		RunInteractive:    shell.RunInteractive,
 		RunLogged:         shell.RunLogged,
+		RunAUR:            shell.RunWithInput,
 		CheckYayAvailable: pacman.CheckYayAvailable,
 		Stdin:             os.Stdin,
 		Out:               os.Stdout,
@@ -70,6 +73,9 @@ func mergeDeps(override Deps) Deps {
 	}
 	if override.RunLogged != nil {
 		d.RunLogged = override.RunLogged
+	}
+	if override.RunAUR != nil {
+		d.RunAUR = override.RunAUR
 	}
 	if override.CheckYayAvailable != nil {
 		d.CheckYayAvailable = override.CheckYayAvailable

@@ -3,75 +3,156 @@ package mcp
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/jyablonski/arc/internal/output"
 )
 
 // PrintListHuman renders canonical MCP configuration entries as one row per
-// entry with a column per provider, the same shape as "arc skills list".
+// entry with a glyph column per provider, the same shape as "arc skills list".
+// The set column says whether the env vars an entry needs exist in this shell,
+// the most likely reason a server that lists fine fails at runtime.
 func PrintListHuman(w io.Writer, providers []Provider, res ListResult) {
+	style := output.StyleFor(w)
+	meta := output.Count(len(res.Servers), "server", "servers") + style.Sep() + output.TildePath(res.CanonicalFile)
+	sc := &output.Screen{W: w, Style: style, Title: "arc mcp list", Meta: meta}
 	if len(res.Servers) == 0 {
-		_, _ = fmt.Fprintf(w, "no MCP configuration entries in %s\n", res.CanonicalFile)
-		_, _ = fmt.Fprintln(w, "run 'arc mcp import' to seed it from your existing tool configs")
-		printUnmanaged(w, res)
+		sc.Notes(unmanagedNotes(style, res))
+		sc.Flush(style.Glyph(output.GlyphInfo) + " no MCP configuration in " + output.TildePath(res.CanonicalFile) +
+			style.Sep() + style.Faint("arc mcp import"))
 		return
 	}
 
-	headers := []string{"name", "type", "env"}
+	grid := output.Grid{Columns: []output.Column{
+		{Header: "name"},
+		{Header: "type"},
+		{Header: "env"},
+		{Header: "set", Align: output.AlignCenter},
+	}}
 	for _, p := range providers {
-		headers = append(headers, p.Name())
+		grid.Columns = append(grid.Columns, output.Column{Header: p.Name(), Align: output.AlignCenter})
 	}
-	rows := make([][]string, 0, len(res.Servers))
+	unset := map[string]string{}
 	for _, s := range res.Servers {
 		name := s.Name
 		if !s.Enabled {
-			name += " (off)"
+			name += style.Faint(" (off)")
 		}
-		row := []string{name, string(s.Type), strings.Join(s.EnvRefs, ",")}
+		env, set := style.Dash(), style.Dash()
+		if len(s.EnvRefs) > 0 {
+			env = strings.Join(s.EnvRefs, ",")
+			set = style.Glyph(output.GlyphOK)
+			for _, ref := range s.EnvRefs {
+				if os.Getenv(ref) == "" {
+					unset[ref] = ref
+					set = style.Glyph(output.GlyphWarn)
+				}
+			}
+		}
+		row := []string{name, string(s.Type), env, set}
 		for _, p := range providers {
-			row = append(row, string(s.Providers[p.Name()].Status))
+			row = append(row, style.Glyph(statusGlyph(s.Providers[p.Name()].Status)))
 		}
-		rows = append(rows, row)
+		grid.Rows = append(grid.Rows, row)
 	}
-	output.FprintTable(w, headers, rows)
+	sc.Grid(grid)
 
-	printDetails(w, providers, res)
-	printUnmanaged(w, res)
+	var notes []output.Note
+	for _, ref := range sortedKeys(unset) {
+		notes = append(notes, output.Note{Glyph: output.GlyphWarn, Label: "env not set", Detail: ref, Hint: "export it before launching the tool"})
+	}
+	notes = append(notes, detailNotes(style, providers, res)...)
+	notes = append(notes, unmanagedNotes(style, res)...)
+	if len(notes) > 0 {
+		sc.Blank()
+		sc.Notes(notes)
+	}
+	sc.Flush(CheckLine(style, len(providers), res))
 }
 
-// printDetails explains every non-ok cell, since "unsupported" and "conflict"
+// detailNotes explains every non-ok cell, since "unsupported" and "conflict"
 // are useless without the reason.
-func printDetails(w io.Writer, providers []Provider, res ListResult) {
-	var lines []string
+func detailNotes(style output.Style, providers []Provider, res ListResult) []output.Note {
+	var notes []output.Note
 	for _, s := range res.Servers {
 		for _, p := range providers {
 			ps := s.Providers[p.Name()]
-			if ps.Detail == "" {
+			if ps.Status == StatusOK || ps.Status == StatusDisabled || ps.Status == StatusExcluded {
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("  %s/%s: %s (%s)", p.Name(), s.Name, ps.Detail, ps.Status))
+			detail := fmt.Sprintf("%s %s %s", p.Name(), style.Sym("›", ">"), s.Name)
+			if ps.Detail != "" {
+				detail += "  " + ps.Detail
+			}
+			notes = append(notes, output.Note{Glyph: statusGlyph(ps.Status), Label: string(ps.Status), Detail: detail, Hint: statusHint[ps.Status]})
 		}
 	}
-	if len(lines) == 0 {
-		return
+	return notes
+}
+
+func unmanagedNotes(style output.Style, res ListResult) []output.Note {
+	var notes []output.Note
+	label := fmt.Sprintf("%d unmanaged", len(res.Unmanaged))
+	for _, u := range res.Unmanaged {
+		notes = append(notes, output.Note{Glyph: output.GlyphWarn, Label: label,
+			Detail: fmt.Sprintf("%s %s %s", u.Provider, style.Sym("›", ">"), u.Name), Hint: "arc mcp import"})
+		label = ""
 	}
-	_, _ = fmt.Fprintln(w)
-	for _, l := range lines {
-		_, _ = fmt.Fprintln(w, l)
+	return notes
+}
+
+// OutOfSync counts provider cells that sync would change or that need a human.
+func (r ListResult) OutOfSync() int {
+	n := 0
+	for _, s := range r.Servers {
+		for _, ps := range s.Providers {
+			switch ps.Status {
+			case StatusMissing, StatusDrift, StatusConflict:
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// CheckLine is the one-line verdict shared by the list footer and --check.
+func CheckLine(style output.Style, providers int, res ListResult) string {
+	sep := style.Sep()
+	if len(res.Servers) == 0 {
+		return style.Glyph(output.GlyphInfo) + " no MCP configuration" + sep + style.Faint("arc mcp import")
+	}
+	if n := res.OutOfSync(); n > 0 {
+		return style.Glyph(output.GlyphWarn) + " " + output.Count(n, "entry", "entries") + " out of sync" + sep + style.Faint("arc mcp sync")
+	}
+	line := style.Glyph(output.GlyphOK) + " " + fmt.Sprintf("%s in sync across %s",
+		output.Count(len(res.Servers), "server", "servers"), output.Count(providers, "provider", "providers"))
+	if n := len(res.Unmanaged); n > 0 {
+		line += sep + fmt.Sprintf("%d unmanaged", n)
+	}
+	return line
+}
+
+func statusGlyph(st Status) output.Glyph {
+	switch st {
+	case StatusOK:
+		return output.GlyphOK
+	case StatusMissing, StatusDisabled, StatusExcluded:
+		return output.GlyphInfo
+	case StatusDrift:
+		return output.GlyphDrift
+	case StatusUnsupported:
+		return output.GlyphFail
+	default:
+		return output.GlyphWarn
 	}
 }
 
-func printUnmanaged(w io.Writer, res ListResult) {
-	if len(res.Unmanaged) == 0 {
-		return
-	}
-	_, _ = fmt.Fprintln(w)
-	_, _ = fmt.Fprintln(w, "Configured in a provider but not canonical (arc leaves these alone):")
-	for _, u := range res.Unmanaged {
-		_, _ = fmt.Fprintf(w, "  %s: %s\n", u.Provider, u.Name)
-	}
-	_, _ = fmt.Fprintln(w, "  run 'arc mcp import' to adopt them")
+var statusHint = map[Status]string{
+	StatusMissing:     "arc mcp sync",
+	StatusDrift:       "arc mcp sync",
+	StatusConflict:    "arc mcp sync --force",
+	StatusUnsupported: "restrict it with --restrict-to",
 }
 
 // PrintSyncHuman summarizes one sync run per provider.

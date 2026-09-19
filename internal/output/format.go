@@ -30,7 +30,7 @@ var (
 func Header(s string) {
 	fmt.Println()
 	_, _ = headerColor.Println(s)
-	fmt.Println(strings.Repeat("-", len(s)))
+	fmt.Println(strings.Repeat("─", len([]rune(s))))
 }
 
 // SectionAccent prints a titled block with underline in the given ANSI style (stdout).
@@ -79,63 +79,31 @@ func Print(s string) {
 	fmt.Println(s)
 }
 
-// Table prints a left-aligned table to stdout in arc's canonical
-// structured-text format: lowercase headers, a per-column underline rule, and a
-// two-space gutter between columns (matches `arc ai tokens`). It is the single
-// supported way to render tabular output across the CLI — prefer it over
-// hand-rolled tabwriter or Printf alignment so every command reads the same.
+// Table prints a left-aligned table to stdout in arc's canonical grid format
+// (see Grid): lowercase headers, a two-space gutter, and no underline rule.
+// Commands that need alignment control, glyph columns, or a flex column should
+// build a Grid directly.
 func Table(headers []string, rows [][]string) {
 	FprintTable(os.Stdout, headers, rows)
 }
 
 // FprintTable writes a canonical table (see Table) to an arbitrary writer.
 func FprintTable(w io.Writer, headers []string, rows [][]string) {
-	for _, line := range TableLines(headers, rows) {
+	for _, line := range tableGrid(headers, rows).Lines(StyleFor(w), 0) {
 		_, _ = fmt.Fprintln(w, line)
 	}
 }
 
-// TableLines renders a canonical table (see Table) as individual lines without
-// printing them, for callers that need to embed or test the output. Headers are
-// lowercased and each line is right-trimmed of padding.
+// TableLines renders a canonical table (see Table) as plain lines without
+// printing them, for callers that need to embed or test the output.
 func TableLines(headers []string, rows [][]string) []string {
-	cols := make([]string, len(headers))
-	widths := make([]int, len(headers))
+	return tableGrid(headers, rows).Lines(Style{Unicode: true}, 0)
+}
+
+func tableGrid(headers []string, rows [][]string) Grid {
+	cols := make([]Column, len(headers))
 	for i, h := range headers {
-		cols[i] = strings.ToLower(h)
-		widths[i] = visibleWidth(cols[i])
+		cols[i] = Column{Header: h}
 	}
-	for _, row := range rows {
-		for i, cell := range row {
-			if w := visibleWidth(cell); i < len(widths) && w > widths[i] {
-				widths[i] = w
-			}
-		}
-	}
-
-	lines := make([]string, 0, len(rows)+2)
-	appendRow := func(cells []string) {
-		var b strings.Builder
-		for i, cell := range cells {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			b.WriteString(cell)
-			if pad := widths[i] - visibleWidth(cell); pad > 0 {
-				b.WriteString(strings.Repeat(" ", pad))
-			}
-		}
-		lines = append(lines, strings.TrimRight(b.String(), " "))
-	}
-
-	appendRow(cols)
-	rule := make([]string, len(widths))
-	for i, w := range widths {
-		rule[i] = strings.Repeat("-", w)
-	}
-	appendRow(rule)
-	for _, row := range rows {
-		appendRow(row)
-	}
-	return lines
+	return Grid{Columns: cols, Rows: rows}
 }

@@ -50,6 +50,16 @@ func RunLogged(log io.Writer, visible bool, name string, args ...string) error {
 	return cmd.Run()
 }
 
+// RunWithInput runs a command whose stdin the caller owns (so it can answer
+// prompts) and whose combined output goes to out.
+func RunWithInput(out io.Writer, stdin *os.File, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = stdin
+	cmd.Stdout = out
+	cmd.Stderr = out
+	return cmd.Run()
+}
+
 func CommandExists(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil

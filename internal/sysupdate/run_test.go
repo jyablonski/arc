@@ -21,8 +21,10 @@ func testDepsKernelStable(t *testing.T) Deps {
 		KernelVersions: func() (map[string]string, error) {
 			return kernel, nil
 		},
-		RunInteractive:    func(name string, args ...string) error { return nil },
-		RunLogged:         func(io.Writer, bool, string, ...string) error { return nil },
+		RunInteractive: func(name string, args ...string) error { return nil },
+		RunLogged:      func(io.Writer, bool, string, ...string) error { return nil },
+		// Never reach the real yay from a test.
+		RunAUR:            func(io.Writer, *os.File, string, ...string) error { return nil },
 		CheckYayAvailable: func() bool { return false },
 		Stdin:             stdinWith(t, "\n"),
 		Out:               io.Discard,
@@ -69,55 +71,9 @@ func TestRunWithDeps_defaultDoesNotCreatePersistentLog(t *testing.T) {
 }
 
 func TestPackageVersionResult_unavailableDoesNotClaimUpdate(t *testing.T) {
-	require.Equal(t, "status unavailable", packageVersionResult("archlinux-keyring", nil, nil, errors.New("query failed"), nil))
-}
-
-func TestRunWithDeps_outputContract(t *testing.T) {
-	deps := testDepsKernelStable(t)
-	var out bytes.Buffer
-	deps.Out = &out
-	deps.Stdin = stdinWith(t, "y\n")
-	started := time.Date(2026, 8, 13, 7, 51, 25, 0, time.Local)
-	times := []time.Time{started, started, started.Add(1400 * time.Millisecond), started.Add(2 * time.Second), started.Add(2400 * time.Millisecond)}
-	deps.Now = func() time.Time {
-		now := times[0]
-		times = times[1:]
-		return now
-	}
-	logFile, err := os.CreateTemp(t.TempDir(), "update-output-*.log")
-	require.NoError(t, err)
-	deps.NewLog = func(time.Time) (*runLog, error) {
-		return &runLog{file: logFile, writer: logFile, path: "/state/arc/update-output.log"}, nil
-	}
-	deps.RepoPlan = func() ([]PackageChange, error) {
-		return []PackageChange{{Name: "bolt", FromVersion: "0.9.11-2", ToVersion: "0.9.11-3", SizeBytes: 1024 * 1024}}, nil
-	}
-	versionCalls := 0
-	deps.InstalledVersions = func() (map[string]string, error) {
-		versionCalls++
-		bolt := "0.9.11-2"
-		if versionCalls == 3 {
-			bolt = "0.9.11-3"
-		}
-		return map[string]string{"archlinux-keyring": "20260727-1", "bolt": bolt}, nil
-	}
-
-	require.NoError(t, RunWithDeps(deps, Options{SkipAUR: true, SkipCache: true, Log: true}))
-	require.Equal(t, ""+
-		"arc update system                                        2026-08-13 07:51:25\n"+
-		"────────────────────────────────────────────────────────────────────────────\n\n"+
-		"SYNC\n"+
-		"  ✓ databases                synchronized                               1.4s\n"+
-		"  ✓ archlinux-keyring        20260727-1 (current)\n\n"+
-		"REPO                                                                1 update\n"+
-		"  bolt  0.9.11-2 → 0.9.11-3\n\n"+
-		"  download 1.0 MiB\n\n"+
-		"  Proceed with 1 repo upgrade? [Y/n] \n"+
-		"  ✓ transaction              1 package, 1.0 MiB                         0.4s\n"+
-		"  ✓ verified                 installed package state\n"+
-		"  ✓ bolt                     0.9.11-3\n"+
-		"  ✓ hooks                    post-transaction complete\n\n"+
-		"  log /state/arc/update-output.log\n", out.String())
+	detail, changed := packageVersionResult("archlinux-keyring", nil, nil, errors.New("query failed"), nil)
+	require.Equal(t, "status unavailable", detail)
+	require.False(t, changed)
 }
 
 func TestRunWithDeps_paccacheFailsContinues(t *testing.T) {

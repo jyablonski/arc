@@ -63,9 +63,15 @@ For background on the Codex metadata translation, see [openai/codex#10585](https
 | `arc skills add --new my-skill` | Create a new skill from the built-in template. |
 | `arc skills sync` | Link canonical skills into each provider. Use `--dry-run` to preview. |
 | `arc skills export ./backup` | Copy canonical skills into another parent directory. |
-| `arc skills list` | Show canonical skills and provider status. |
+| `arc skills list` | Show canonical skills and provider status. `--check` prints one line and exits non-zero on drift. |
 | `arc skills validate --fix` | Validate frontmatter and fix supported naming mismatches. |
 | `arc skills remove my-skill` | Remove a canonical skill and its provider symlinks. Real provider files are preserved. |
 | `arc skills prune` | Remove dangling provider symlinks. |
 
 Sync is one-way. `~/ai/skills/` is the source of truth, and provider-local real content is left for manual review.
+
+## Reading `arc skills list`
+
+Each provider cell is a glyph: `✓` linked to canonical, `·` not linked yet, `≠` linked somewhere other than canonical, `⚠` real files where the link belongs, `✗` a dangling link. Every non-`✓` cell is explained under the table with the command that fixes it, and the canonical root is printed once in the title instead of repeated per row.
+
+Skills that exist in a provider but not in `~/ai/skills/` are listed as **unmanaged**, with the `arc skills add` command that would adopt one. Tool-bundled skills are not counted: hidden entries such as Codex's `.system`, and real directories in Cursor's skills directory, which Cursor fills with its own.

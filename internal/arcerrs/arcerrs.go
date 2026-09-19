@@ -24,4 +24,6 @@ var (
 	ErrAssumeYesLinuxOnly = errors.New("--yes is only supported for system updates on Linux")
 
 	ErrUpdateLogLinuxOnly = errors.New("--log is only supported for system updates on Linux")
+
+	ErrAURDiffLinuxOnly = errors.New("--diff is only supported for system updates on Linux")
 )
