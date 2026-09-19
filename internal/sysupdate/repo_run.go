@@ -21,20 +21,20 @@ func runRepoUpdate(d Deps, renderer Renderer, log *runLog, reader *bufio.Reader,
 	logRepoPlan(log, plan)
 	if len(plan) == 0 {
 		renderer.Section("REPO", "up to date")
-		renderer.Result("packages", "no updates", 0)
 		return false, false, nil
 	}
 
 	for attempt := 0; attempt < maxPlanChanges; attempt++ {
-		renderer.Section("REPO", fmt.Sprintf("%d %s", len(plan), plural(len(plan), "update", "updates")))
+		renderer.Section("REPO", repoSummary(plan, renderer.style().Sep()))
 		renderer.Plan(plan)
+		renderer.Blank()
 		if assumeYes {
 			renderer.Info("repository approval bypassed by --yes")
 		} else {
-			renderer.Prompt(fmt.Sprintf("Proceed with %d repo %s?", len(plan), plural(len(plan), "upgrade", "upgrades")))
+			renderer.Prompt(repoPrompt(plan), true)
 			approvalLogStart := log.position()
 			approved, err := readApproval(reader)
-			renderer.Blank()
+			renderer.EndPrompt()
 			if err != nil {
 				return false, false, renderRunFailure(renderer, log, approvalLogStart, "repository approval failed", err)
 			}
@@ -53,9 +53,6 @@ func runRepoUpdate(d Deps, renderer Renderer, log *runLog, reader *bufio.Reader,
 		logRepoPlan(log, confirmed)
 		if len(confirmed) == 0 {
 			renderer.Warning("repository plan changed while awaiting approval; no updates remain")
-			renderer.Blank()
-			renderer.Section("REPO", "up to date")
-			renderer.Result("packages", "no updates", 0)
 			return false, false, nil
 		}
 		if samePackagePlan(plan, confirmed) {
@@ -98,17 +95,30 @@ func runRepoUpdate(d Deps, renderer Renderer, log *runLog, reader *bufio.Reader,
 		}
 	}
 
-	detail := fmt.Sprintf("%d %s", len(plan), plural(len(plan), "package", "packages"))
-	if size := totalDownloadSize(plan); size > 0 {
-		detail += ", " + output.Bytes(size)
-	}
-	renderer.Result("transaction", detail, d.Now().Sub(started))
-	renderer.Result("verified", "installed package state", 0)
+	// Rows print only after every installed version was verified against the
+	// approved plan, so a ✓ here means "installed as approved".
 	for _, change := range plan {
-		renderer.PackageResult(change)
+		renderer.PackageResult(change, 0)
 	}
-	renderer.Result("hooks", "post-transaction complete", 0)
+	renderer.Result("hooks", "post-transaction complete", d.Now().Sub(started))
+	renderer.countUpgraded(len(plan))
 	return true, false, nil
+}
+
+func repoSummary(plan []PackageChange, sep string) string {
+	summary := fmt.Sprintf("%d %s", len(plan), plural(len(plan), "update", "updates"))
+	if size := totalDownloadSize(plan); size > 0 {
+		summary += sep + output.Bytes(size)
+	}
+	return summary
+}
+
+func repoPrompt(plan []PackageChange) string {
+	label := fmt.Sprintf("Upgrade %d repo %s", len(plan), plural(len(plan), "package", "packages"))
+	if size := totalDownloadSize(plan); size > 0 {
+		label += ", " + output.Bytes(size)
+	}
+	return label + "?"
 }
 
 func logRepoPlan(log *runLog, plan []PackageChange) {

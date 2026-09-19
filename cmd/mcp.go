@@ -25,9 +25,13 @@ var (
 	mcpAddHeaders   []string
 	mcpAddDisabled  bool
 	mcpAddProviders []string
+	mcpListCheck    bool
 )
 
-var ErrMCPConflict = errors.New("mcp: unresolved conflicts")
+var (
+	ErrMCPConflict = errors.New("mcp: unresolved conflicts")
+	ErrMCPDrift    = errors.New("mcp: provider configuration out of sync")
+)
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
@@ -50,10 +54,14 @@ var mcpListCmd = &cobra.Command{
 	Short: "List canonical MCP configuration and its per-provider status",
 	Long: `Shows every canonical configuration entry with one column per provider.
 
-Statuses: ok (matches), missing (not written yet), drift (arc owns it and it
-was edited elsewhere), conflict (configured by hand and differs; sync will not
-touch it), unsupported (the provider's dialect cannot express it), disabled,
-excluded (restricted to other providers).`,
+Cells: ✓ matches canonical, · not written yet (or disabled/excluded), ≠ drift
+(arc owns it and it was edited elsewhere), ⚠ conflict (configured by hand and
+differs; sync will not touch it), ✗ unsupported (the provider's dialect cannot
+express it). The set column shows whether the entry's env vars exist in this
+shell. --json carries the full status names.
+
+Use --check for a single line and a non-zero exit when any provider is out of
+sync (for shell prompts and cron).`,
 	RunE: runMCPList,
 }
 
@@ -154,10 +162,20 @@ func runMCPList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
-		return encodeMCPJSON(res)
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	switch {
+	case jsonOut:
+		if err := encodeMCPJSON(res); err != nil {
+			return err
+		}
+	case mcpListCheck:
+		fmt.Println(mcp.CheckLine(output.StyleFor(os.Stdout), len(m.Providers()), res))
+	default:
+		mcp.PrintListHuman(os.Stdout, m.Providers(), res)
 	}
-	mcp.PrintListHuman(os.Stdout, m.Providers(), res)
+	if mcpListCheck && res.OutOfSync() > 0 {
+		return ErrMCPDrift
+	}
 	return nil
 }
 
@@ -369,6 +387,7 @@ func encodeMCPJSON(v any) error {
 func init() {
 	rootCmd.AddCommand(mcpCmd)
 	mcpCmd.AddCommand(mcpListCmd)
+	mcpListCmd.Flags().BoolVar(&mcpListCheck, "check", false, "Print one verdict line and exit non-zero on drift")
 	mcpCmd.AddCommand(mcpSyncCmd)
 	mcpCmd.AddCommand(mcpImportCmd)
 	mcpCmd.AddCommand(mcpAddCmd)

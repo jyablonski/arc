@@ -14,15 +14,15 @@ func publishedAgo(now time.Time, unixSeconds int64) string {
 	}
 	age := now.Sub(time.Unix(unixSeconds, 0))
 	if age < 0 {
-		return "published in the future"
+		return "in the future"
 	}
 	switch {
 	case age < time.Hour:
-		return fmt.Sprintf("published %dm ago", max(1, int(age.Minutes())))
+		return fmt.Sprintf("%dm ago", max(1, int(age.Minutes())))
 	case age < 48*time.Hour:
-		return fmt.Sprintf("published %dh ago", int(age.Hours()))
+		return fmt.Sprintf("%dh ago", int(age.Hours()))
 	default:
-		return fmt.Sprintf("published %dd ago", int(age.Hours()/24))
+		return fmt.Sprintf("%dd ago", int(age.Hours()/24))
 	}
 }
 

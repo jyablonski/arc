@@ -155,12 +155,11 @@ type ROISummary struct {
 	Multiple         float64
 }
 
-func PrintROISummary(summary ROISummary) {
+// roiLines renders the subscription-value block embedded in `arc ai usage`.
+func roiLines(style output.Style, summary ROISummary) []string {
 	if len(summary.Entries) == 0 {
-		return
+		return nil
 	}
-	output.SectionAccent("Subscription ROI", providerAccent("claude"))
-	fmt.Printf("window: %s\n", summary.WindowLabel)
 	rows := make([][]string, 0, len(summary.Entries)+1)
 	for _, e := range summary.Entries {
 		rows = append(rows, []string{
@@ -176,9 +175,17 @@ func PrintROISummary(summary ROISummary) {
 		formatCurrency(summary.SubscriptionCost, true, false),
 		formatMultiple(summary.Multiple),
 	})
-	headers := []string{"provider", "api equiv", "subscription", "multiple"}
-	alignNumericColumns(rows, headers)
-	output.Table(headers, rows)
+	grid := output.Grid{
+		Columns: []output.Column{
+			{Header: "provider"},
+			{Header: "api equiv", Align: output.AlignRight},
+			{Header: "subscription", Align: output.AlignRight},
+			{Header: "multiple", Align: output.AlignRight},
+		},
+		Rows: rows,
+	}
+	lines := []string{style.Faint("subscription ROI  " + summary.WindowLabel)}
+	return append(lines, grid.Lines(style, style.Width)...)
 }
 
 func formatMultiple(v float64) string {

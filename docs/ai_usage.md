@@ -23,12 +23,23 @@ arc ai usage                         # all providers
 arc ai usage --provider claude       # one provider
 arc ai usage --provider claude,codex
 arc ai usage --no-cache              # bypass the local cache
+arc ai usage --short                 # one verdict line, for prompts and status bars
 arc ai usage --json
 ```
 
 Use `--provider` when you want to troubleshoot one tool. Selecting providers also bypasses the shared usage cache.
 
-The human-readable output shows each provider's usage window, remaining percentage, and reset time. JSON output includes provider-specific details that are not shown in the table.
+The human-readable output is one table across every provider. The bar fills with what has been **consumed**, the `left` column is what remains, and a window that has not started yet says so rather than showing a bare dash. Percentages are whole numbers, keeping one decimal only below 10% where the difference is actionable; a window with any consumption never reads as `100%`.
+
+The closing line is the verdict — the one line worth reading on a return visit:
+
+```
+✓ all windows clear · tightest is claude 7 day at 97% left
+```
+
+A window below 20% remaining makes that line a warning, and an exhausted window makes it a failure. `--short` prints only that line.
+
+Window names are normalized across providers (`5 hour`, `7 day`, `7 day · opus`, `month · api`). JSON keeps each provider's own wording in `label` and adds arc's name in `window`, along with provider-specific details that are not shown in the table.
 
 ## Cache
 

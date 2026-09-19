@@ -26,6 +26,7 @@ import (
 var (
 	aiUsageProvider         string
 	aiUsageNoCache          bool
+	aiUsageShort            bool
 	aiTokensProvider        string
 	aiTokensSince           string
 	aiTokensUntil           string
@@ -41,6 +42,7 @@ var (
 	aiSessionsLimit         int
 	aiSessionsSearch        string
 	aiSessionsResume        bool
+	aiSessionsAll           bool
 	aiHealthProvider        string
 )
 
@@ -135,29 +137,30 @@ func runAIUsage(cmd *cobra.Command, args []string) error {
 
 	useCache := !aiUsageNoCache && aiUsageProvider == ""
 	now := time.Now()
+	agg, cached := ai.AggregateReport{}, false
 	if useCache {
-		if cached, ok, err := ai.ReadCache(now); err == nil && ok {
-			if jsonOut {
-				return aiExitJSON(os.Stdout, cached)
-			}
-			presentation.PrintAggregate(cached)
-			printUsageROI(cmd.Context(), filters, now)
-			return ai.ExitErrorIfAllProvidersFailed(cached)
+		// An unreadable cache is not an error: fall through and fetch.
+		if cachedAgg, ok, cacheErr := ai.ReadCache(now); cacheErr == nil && ok {
+			agg, cached = cachedAgg, true
 		}
 	}
-
-	agg := ai.RunProviders(cmd.Context(), providers, filters)
-	agg.FetchedAt = now
-
-	if useCache {
-		_ = ai.WriteCache(now, agg)
+	if !cached {
+		agg = ai.RunProviders(cmd.Context(), providers, filters)
+		agg.FetchedAt = now
+		if useCache {
+			_ = ai.WriteCache(now, agg)
+		}
 	}
+	ai.NormalizeWindows(&agg)
 
 	if jsonOut {
 		return aiExitJSON(os.Stdout, agg)
 	}
-	presentation.PrintAggregate(agg)
-	printUsageROI(cmd.Context(), filters, now)
+	opts := presentation.UsageOptions{Now: now, Cached: cached, Short: aiUsageShort}
+	if !aiUsageShort {
+		opts.ROI = usageROI(cmd.Context(), filters, now)
+	}
+	presentation.PrintUsage(os.Stdout, agg, opts)
 	return ai.ExitErrorIfAllProvidersFailed(agg)
 }
 
@@ -330,6 +333,8 @@ func runAISessions(cmd *cobra.Command, args []string) error {
 		Until:  histOpts.Until,
 		Limit:  aiSessionsLimit,
 		Search: strings.TrimSpace(aiSessionsSearch),
+
+		IncludeAutomated: aiSessionsAll,
 	}
 
 	report := ai.RunSessionProviders(cmd.Context(), localSessionProviders(), filters, opts)
@@ -341,7 +346,7 @@ func runAISessions(cmd *cobra.Command, args []string) error {
 		}
 		return ai.ExitErrorIfAllSessionProvidersFailed(report)
 	}
-	presentation.PrintSessions(report, presentation.SessionsPrintOptions{ShowResume: aiSessionsResume})
+	presentation.PrintSessions(os.Stdout, report, presentation.SessionsPrintOptions{ShowResume: aiSessionsResume, Now: report.FetchedAt})
 	return ai.ExitErrorIfAllSessionProvidersFailed(report)
 }
 
@@ -470,17 +475,17 @@ func parseHistoryDateFlag(raw string) (time.Time, error) {
 	return t, nil
 }
 
-func printUsageROI(ctx context.Context, filters []string, now time.Time) {
+func usageROI(ctx context.Context, filters []string, now time.Time) presentation.ROISummary {
+	var summary presentation.ROISummary
 	cfg, ok, err := ai.ReadConfig()
 	if err != nil || !ok || !cfg.HasSubscriptions() {
-		return
+		return summary
 	}
 	report := ai.RunHistoryProviders(ctx, localHistoryProviders(), filters, ai.CurrentMonthOptions(now), ai.NewLayeredPricer(), "provider")
 	byProvider := map[string]float64{}
 	for _, group := range report.Groups {
 		byProvider[group.Provider] = group.CostUSD
 	}
-	var summary presentation.ROISummary
 	start := reportPeriodStart(now)
 	summary.WindowLabel = fmt.Sprintf("%s to %s", start.Format("2006-01-02"), now.Format("2006-01-02"))
 	for provider, subscription := range cfg.Subscriptions {
@@ -503,7 +508,7 @@ func printUsageROI(ctx context.Context, filters []string, now time.Time) {
 	if summary.SubscriptionCost > 0 {
 		summary.Multiple = summary.EquivalentCost / summary.SubscriptionCost
 	}
-	presentation.PrintROISummary(summary)
+	return summary
 }
 
 func reportPeriodStart(now time.Time) time.Time {
@@ -534,6 +539,7 @@ func aiExitJSON(w io.Writer, agg ai.AggregateReport) error {
 func init() {
 	aiUsageCmd.Flags().StringVar(&aiUsageProvider, "provider", "", "Only these providers (comma-separated): claude, codex, cursor")
 	aiUsageCmd.Flags().BoolVar(&aiUsageNoCache, "no-cache", false, "Bypass ~/.cache/arc/ai-usage.json")
+	aiUsageCmd.Flags().BoolVar(&aiUsageShort, "short", false, "Print only the one-line verdict (for shell prompts and status bars)")
 	aiTokensCmd.Flags().StringVar(&aiTokensProvider, "provider", "", "Only these providers (comma-separated): claude, codex")
 	aiTokensCmd.Flags().StringVar(&aiTokensSince, "since", "", "Only records on or after this date (YYYY-MM-DD or RFC3339)")
 	aiTokensCmd.Flags().StringVar(&aiTokensUntil, "until", "", "Only records on or before this date (YYYY-MM-DD or RFC3339)")
@@ -549,6 +555,7 @@ func init() {
 	aiSessionsCmd.Flags().IntVar(&aiSessionsLimit, "limit", 20, "Show at most this many sessions (0 for no limit)")
 	aiSessionsCmd.Flags().StringVar(&aiSessionsSearch, "search", "", "Only sessions whose project, title, or id contains this text")
 	aiSessionsCmd.Flags().BoolVar(&aiSessionsResume, "resume", false, "Also print the command to resume each session")
+	aiSessionsCmd.Flags().BoolVar(&aiSessionsAll, "all", false, "Include automated sessions such as Codex auto-review")
 	aiHealthCmd.Flags().StringVar(&aiHealthProvider, "provider", "", "Only these providers (comma-separated): claude, codex, cursor")
 	aiCmd.AddCommand(aiUsageCmd)
 	aiCmd.AddCommand(aiTokensCmd)

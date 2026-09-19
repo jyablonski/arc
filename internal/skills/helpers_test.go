@@ -2,6 +2,7 @@ package skills
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,19 @@ func TestPrintListHuman(t *testing.T) {
 			},
 			Conflicts: []ConflictBackup{{Provider: "claude", Path: "/backup/path"}},
 		})
-		require.Contains(t, buf.String(), "Conflict backups")
-		require.Contains(t, buf.String(), "/backup/path")
+		out := buf.String()
+		require.Contains(t, out, "conflict backup  /backup/path")
+		require.Contains(t, out, "not linked       codex › demo  arc skills sync")
+		require.Contains(t, out, "name  claude  codex\ndemo    ✓       ·\n", "glyphs centre under provider headers")
+		require.True(t, strings.HasSuffix(out, "⚠ 1 slot out of sync · arc skills sync\n"))
+	})
+	t.Run("unmanaged skills get an adoption hint", func(t *testing.T) {
+		var buf bytes.Buffer
+		PrintListHuman(&buf, []Provider{{Name: "claude"}}, ListResult{
+			Skills:    []SkillEntry{{Name: "demo", Providers: map[string]Status{"claude": StatusOK}}},
+			Unmanaged: []UnmanagedSkill{{Provider: "claude", Name: "stray", Path: "/p/stray"}},
+		})
+		require.Contains(t, buf.String(), "⚠ 1 unmanaged  claude › stray  arc skills add /p/stray")
+		require.Contains(t, buf.String(), "✓ 1 skill in sync across 1 provider · 1 unmanaged")
 	})
 }

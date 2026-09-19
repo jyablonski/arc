@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-
-	"github.com/jyablonski/arc/internal/output"
 )
 
 type Options struct {
@@ -13,6 +11,10 @@ type Options struct {
 	SkipCache bool
 	AssumeYes bool
 	Log       bool
+	// Verbose prints routine warnings that are otherwise only counted.
+	Verbose bool
+	// ShowDiff expands every AUR build-file diff, not just non-routine ones.
+	ShowDiff bool
 }
 
 // Run updates the system using [DefaultDeps].
@@ -20,24 +22,28 @@ func Run(opts Options) error {
 	return RunWithDeps(Deps{}, opts)
 }
 
-// promptReboot asks whether to reboot after a kernel update.
-func promptReboot(stdin io.Reader, runInteractive func(name string, args ...string) error) error {
-	output.Warning("A kernel update was successfully installed. A reboot is required for the changes to take effect.")
-	fmt.Print("Reboot now? [Y/n]: ")
+// promptReboot asks whether to reboot after a kernel update. It renders
+// through the run's renderer so the question keeps arc's voice and lands on
+// the same stream as everything above it.
+func promptReboot(renderer Renderer, stdin io.Reader, runInteractive func(name string, args ...string) error) error {
+	renderer.Blank()
+	renderer.Warning("a kernel update was installed; a reboot is required for it to take effect")
+	renderer.Prompt("Reboot now?", true)
 
 	reader := bufio.NewReader(stdin)
 	response, err := reader.ReadString('\n')
+	renderer.EndPrompt()
 	if err != nil {
 		return fmt.Errorf("failed to read user input: %w", err)
 	}
 
 	if parseRebootConfirmation(response) {
-		output.Info("Rebooting now...")
+		renderer.Info("rebooting now")
 		if err := runInteractive("sudo", "reboot"); err != nil {
 			return fmt.Errorf("failed to reboot: %w", err)
 		}
 	} else {
-		output.Info("Reboot skipped. Please reboot manually when convenient.")
+		renderer.Info("reboot skipped; reboot manually when convenient")
 	}
 
 	return nil

@@ -22,7 +22,7 @@ func TestHeader(t *testing.T) {
 		combined := stdout + stderr
 
 		assert.Contains(t, combined, "Test Header")
-		assert.Contains(t, stdout, "---")
+		assert.Contains(t, stdout, "───")
 	})
 }
 
@@ -133,15 +133,14 @@ func TestTable(t *testing.T) {
 }
 
 func TestTableLines(t *testing.T) {
-	t.Run("lowercases headers and underlines each column", func(t *testing.T) {
+	t.Run("lowercases headers without an underline rule", func(t *testing.T) {
 		lines := TableLines(
 			[]string{"NAME", "STATUS"},
 			[][]string{{"demo", "ok"}},
 		)
-		require.Len(t, lines, 3)
+		require.Len(t, lines, 2)
 		assert.Equal(t, "name  status", lines[0])
-		assert.Equal(t, "----  ------", lines[1])
-		assert.Equal(t, "demo  ok", lines[2])
+		assert.Equal(t, "demo  ok", lines[1])
 	})
 
 	t.Run("aligns cells by visible width ignoring ANSI color codes", func(t *testing.T) {
@@ -155,8 +154,8 @@ func TestTableLines(t *testing.T) {
 		)
 		// Both group cells have 11 visible runes, so the share column must
 		// start at the same offset on both data rows.
-		plain := ansiPattern.ReplaceAllString(lines[2], "")
-		require.Equal(t, strings.Index(plain, "64.5%"), strings.Index(lines[3], "35.5%"))
+		plain := ansiPattern.ReplaceAllString(lines[1], "")
+		require.Equal(t, strings.Index(plain, "64.5%"), strings.Index(lines[2], "35.5%"))
 	})
 
 	t.Run("trims trailing whitespace from padded cells", func(t *testing.T) {

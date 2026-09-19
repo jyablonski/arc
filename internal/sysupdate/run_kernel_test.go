@@ -48,7 +48,7 @@ func TestRunWithDeps_kernelBump_rebootDeferredAfterAURAndCache(t *testing.T) {
 	f, err := os.CreateTemp("", "sysupdate-stdin")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(f.Name()) })
-	_, err = f.WriteString("y\ny\n")
+	_, err = f.WriteString("y\ny\ny\n")
 	require.NoError(t, err)
 	require.NoError(t, f.Sync())
 	_, err = f.Seek(0, 0)
@@ -73,6 +73,10 @@ func TestRunWithDeps_kernelBump_rebootDeferredAfterAURAndCache(t *testing.T) {
 		return nil
 	}
 	deps.CheckYayAvailable = func() bool { return true }
+	deps.RunAUR = func(_ io.Writer, _ *os.File, name string, args ...string) error {
+		order = append(order, name+" "+strings.Join(args, " "))
+		return nil
+	}
 	deps.ForeignPackages = testForeignPackageUpgrade()
 	deps.ReviewAUR = func(context.Context, map[string]string) (*aurreview.Result, error) {
 		return testPendingAURResult(), nil

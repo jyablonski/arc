@@ -1,32 +1,49 @@
 # Reviewing AUR updates
 
-`arc update system` summarizes pending AUR updates, shows all PKGBUILD and related build-file diffs automatically, and points out changes worth extra attention. Arc disables yay's package-exclusion, clean-build, and PKGBUILD-edit menus for this invocation. You do not select diffs or press `A`; review what is shown and answer yay only when it presents a real install or dependency decision. Arc keeps routine source, compiler, test, and packaging output out of the terminal while showing important warnings and concise progress. Use `--log` to save the complete raw output to a private file.
+`arc update system` summarizes pending AUR updates, classifies what changed in each package's build files, and asks once before anything is built. Arc keeps routine source, compiler, test, and packaging output out of the terminal while showing important warnings and concise progress. Use `--log` to save the complete raw output to a private file.
 
 Arc trusts a reviewed snapshot only after the installed state matches the reviewed plan. A canceled or unsuccessful update remains flagged next time. See [platforms](platforms.md) for the checks and state locations.
 
-## Automatic diff review
+## The AUR section
 
-Arc invokes yay with per-run overrides equivalent to `--answerupgrade None --cleanmenu=false --diffmenu --answerdiff All --editmenu=false`. These do not change your saved yay configuration. Arc hides yay's already-answered selection menu and renders every collected diff inline under a `diff · <package>` heading. Removed lines are red, added lines are green, and the complete diff remains in terminal scrollback before yay asks whether to install.
+```
+AUR                                                    2 updates · 1 ignored
+    cursor-bin          3.21.13-1 → 3.21.16-1   3h ago  pkgver + checksums
+    google-cloud-cli    584.0.0-1 → 585.0.0-1   4h ago  pkgver + checksums
+  · spotify             held at 1:1.2.96.518-2          IgnorePkg
 
-"Build-file diff" deliberately includes more than the literal `PKGBUILD`. AUR repositories can also contain `.install` scripts, hooks, patches, and local helpers; those files can carry the actual payload and must remain visible and scanned.
+  ✓ review              no build logic changed                     d to diff
+  Upgrade 2 AUR packages? [Y/n]
+```
 
-When driving yay directly rather than through arc, at `Diffs to show?`:
+The last column is arc's classification of that package's files against the last trusted snapshot. It names what moved — `pkgver`, `checksums`, `metadata`, `depends`, `source`, `install`, or a build function such as `package()` — and any file that is not the `PKGBUILD` by name.
 
-- `a` + Enter: show diffs for all packages
-- `1`, `1 3`, `1-3`: show diffs for specific packages by number
-- `^2`: show all except package 2
-- Enter alone: choose `[N]one`, which **skips the review entirely**. This warning applies to direct yay usage; arc chooses all diffs automatically.
+A change is **routine** only when nothing that decides what gets fetched, built, or run on your machine moved: version fields (including maintainer helpers like `_commit`), checksums, descriptive metadata, and dependency removals. Routine changes collapse to that one line.
 
-Press `Ctrl-C` at any yay prompt to abort without installing anything. Packages being built for the first time have no previous version to diff against, so yay shows the full PKGBUILD. Read it top to bottom once; future updates only need the diff.
+Anything else — a changed `source`, a touched `prepare()`/`build()`/`package()`, a new `.install` or patch file, an added dependency, or a package with no trusted snapshot yet — **prints its diff automatically** before the prompt. A package whose files could not be fetched says `build files unavailable`: arc compared nothing, and never reports that as "unchanged". Press `d` at the prompt (or pass `--diff`) to see every diff, including the routine ones.
+
+"Build file" deliberately includes more than the literal `PKGBUILD`. AUR repositories can also contain `.install` scripts, hooks, patches, and local helpers; those files can carry the actual payload and are classified, scanned, and diffed too.
+
+## One gate per section
+
+Enter approves. When the scan produced a HIGH finding the default flips to `[y/N]`, so Enter declines. Answering `n` skips yay entirely and leaves the packages flagged for next time.
+
+After you approve, arc owns yay's stdin and answers yay's `Proceed with install?` and pacman's `Proceed with installation?` itself — but only while the transaction matches what you approved. If yay pulls in an AUR dependency you never saw, or pacman's package list contains anything outside the approved plan, arc stops and puts the decision to you in its own wording, naming exactly what is extra. Any other prompt (a provider choice, an unexpected question) is shown verbatim and your answer is passed through.
+
+Arc invokes yay with per-run overrides equivalent to `--answerupgrade None --cleanmenu=false --editmenu=false --diffmenu=false`; these do not change your saved yay configuration. Yay's own diff menu stays off because arc already diffed the files against its trusted snapshot. If arc's review is unavailable (no network, AUR RPC down), it falls back to yay's diff review and surfaces every gate to you instead of answering any of them.
+
+Press `Ctrl-C` at any prompt to abort without installing anything.
 
 ### When running yay directly
 
-Arc's inline rendering applies only to `arc update system`. Direct yay invocations use yay's configured pager:
+Arc's rendering applies only to `arc update system`. Direct yay invocations use yay's configured pager:
 
 - **Choose a pager.** yay uses its pager configuration and then `$PAGER`. For example, `PAGER=cat yay` keeps diffs inline, while `PAGER=less yay` uses an interactive pager.
-- **Read it in your editor instead.** When driving yay directly, answer `N` to `Diffs to show?` and pick packages at the `PKGBUILDs to edit?` prompt. Yay opens the files in `$EDITOR`. With `EDITOR='code --wait'` or `nvim`, close the editor window to continue. This shows the current files, not a diff.
+- **Read it in your editor instead.** Answer `N` to `Diffs to show?` and pick packages at the `PKGBUILDs to edit?` prompt. Yay opens the files in `$EDITOR`. With `EDITOR='code --wait'` or `nvim`, close the editor window to continue. This shows the current files, not a diff.
 - **Inspect the clone yourself.** Yay keeps its checkouts in `~/.cache/yay/<pkgbase>/`, which is a plain Git repository. From another terminal, run `git -C ~/.cache/yay/cursor-bin log -p`, or open the repository in a Git GUI or diff tool.
 - **Browse it on the web.** Every package's history is public cgit: `https://aur.archlinux.org/cgit/aur.git/log/?h=<pkgbase>` shows each commit as a clickable diff in your browser.
+
+At yay's `Diffs to show?` prompt: `a` + Enter shows every diff, `1 3` or `1-3` picks packages by number, `^2` shows all except package 2, and Enter alone chooses `[N]one`, which **skips the review entirely**.
 
 ## What a normal update looks like
 
@@ -118,4 +135,4 @@ The same applies to a new `npm install`, `pip install`, or `cargo install` for a
 5. Does anything require effort to read? Obfuscation is a red flag by itself.
 6. Cross-check arc's findings: maintainer/adoption flags raise the bar for everything above.
 
-When in doubt, answer `n` at the install prompt or press `Ctrl-C`. Nothing installs, and the package stays flagged. Arc commits its trusted baseline only after a yay run succeeds and the installed versions match the reviewed plan, so a rejected diff appears again on the next update.
+When in doubt, answer `n` at arc's AUR prompt or press `Ctrl-C`. Nothing installs, and the package stays flagged. Arc commits its trusted baseline only after a yay run succeeds and the installed versions match the reviewed plan, so a rejected diff appears again on the next update.

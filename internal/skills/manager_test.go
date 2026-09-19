@@ -865,3 +865,35 @@ func TestPrune_RemovesOnlyDangling(t *testing.T) {
 		t.Errorf("real dir was touched")
 	}
 }
+
+func TestList_UnmanagedSkills(t *testing.T) {
+	m, p, _ := newTestManager(t, false)
+	writeSkill(t, filepath.Join(p.SkillsRoot, "canon"), "canon", "d")
+	// A skill installed straight into Claude is unmanaged.
+	writeSkill(t, filepath.Join(p.ClaudeDir, "skills", "stray"), "stray", "d")
+	// Codex's hidden bundled dir and Cursor's bundled real dirs are not.
+	writeSkill(t, filepath.Join(p.CodexDir, "skills", ".system"), "system", "d")
+	writeSkill(t, filepath.Join(p.CursorDir, "bundled"), "bundled", "d")
+	// A symlink in Cursor's shared dir is something a person put there.
+	external := filepath.Join(t.TempDir(), "linked")
+	writeSkill(t, external, "linked", "d")
+	if err := os.Symlink(external, filepath.Join(p.CursorDir, "linked")); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := m.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, u := range res.Unmanaged {
+		got = append(got, u.Provider+"/"+u.Name)
+	}
+	want := []string{"claude/stray", "cursor/linked"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("unmanaged = %v, want %v", got, want)
+	}
+	if res.Root != p.SkillsRoot {
+		t.Fatalf("root = %q", res.Root)
+	}
+}

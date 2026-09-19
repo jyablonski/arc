@@ -6,6 +6,9 @@ type Provider struct {
 	Name      string
 	SkillsDir string
 	RulesFile string
+	// SharedDir marks a skills dir the tool also fills with its own bundled
+	// skills as real directories; only symlinks there can be user-managed.
+	SharedDir bool
 }
 
 func Providers(p Paths) []Provider {
@@ -24,6 +27,7 @@ func Providers(p Paths) []Provider {
 			Name:      "cursor",
 			SkillsDir: p.CursorDir,
 			RulesFile: "",
+			SharedDir: true,
 		},
 		{
 			Name:      "opencode",

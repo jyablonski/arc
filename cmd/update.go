@@ -18,6 +18,8 @@ var (
 	updateNoCache bool
 	updateYes     bool
 	updateLog     bool
+	updateVerbose bool
+	updateDiff    bool
 )
 
 var updateCmd = &cobra.Command{
@@ -46,13 +48,22 @@ var updateSystemCmd = &cobra.Command{
 	Use:   "system",
 	Short: "Run system package updates",
 	Long: `Update the system packages. On Linux, arc renders and gates the resolved pacman
-transaction, verifies installed versions, optionally runs yay -Syu --aur with its
-PKGBUILD and related build-file diffs shown automatically, and optionally cleans
-the package cache. Arc skips yay's exclude, clean-build, and edit menus; you are
-prompted only when yay needs a real transaction decision. Before yay runs, arc
-triages pending AUR updates for takeover signals and scans changed package files
-for high-signal patterns. Use --log to save complete raw output under Arc's state
-directory. macOS runs brew update, brew upgrade, and optional brew cleanup.`,
+transaction, verifies installed versions, optionally updates AUR packages with
+yay, and optionally cleans the package cache.
+
+Before yay runs, arc triages pending AUR updates for takeover signals, scans
+changed package files for high-signal patterns, and classifies each package's
+build-file change against the last trusted snapshot. Routine bumps (pkgver,
+checksums, metadata) print as one line; anything touching sources, build
+functions, install hooks, or new dependencies shows its diff automatically.
+Answer d at the AUR prompt (or pass --diff) to see every diff. arc then asks
+once per section and answers yay's and pacman's own prompts itself only while
+the transaction matches what you approved; anything else is put to you.
+
+Routine warnings (e.g. AUR sources without PGP signatures) are counted in the
+closing summary; use -v to print them. Use --log to save complete raw output
+under Arc's state directory. macOS runs brew update, brew upgrade, and optional
+brew cleanup.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("no-aur") && app.Platform != platform.Linux {
 			return arcerrs.ErrNoAURLinuxOnly
@@ -63,11 +74,16 @@ directory. macOS runs brew update, brew upgrade, and optional brew cleanup.`,
 		if cmd.Flags().Changed("log") && app.Platform != platform.Linux {
 			return arcerrs.ErrUpdateLogLinuxOnly
 		}
+		if cmd.Flags().Changed("diff") && app.Platform != platform.Linux {
+			return arcerrs.ErrAURDiffLinuxOnly
+		}
 		return app.PkgMgr.UpdateSystem(pkgmgr.UpdateOptions{
 			SkipAUR:   updateNoAUR,
 			SkipCache: updateNoCache,
 			AssumeYes: updateYes,
 			Log:       updateLog,
+			Verbose:   updateVerbose,
+			ShowDiff:  updateDiff,
 		})
 	},
 }
@@ -98,4 +114,6 @@ func init() {
 	updateSystemCmd.Flags().BoolVar(&updateNoCache, "no-cache", false, "Skip cache cleanup")
 	updateSystemCmd.Flags().BoolVarP(&updateYes, "yes", "y", false, "Approve the displayed Linux repository transaction without prompting")
 	updateSystemCmd.Flags().BoolVar(&updateLog, "log", false, "Save complete Linux subprocess output to a private update log")
+	updateSystemCmd.Flags().BoolVarP(&updateVerbose, "verbose", "v", false, "Print routine warnings that are otherwise only counted in the summary")
+	updateSystemCmd.Flags().BoolVar(&updateDiff, "diff", false, "Show every AUR build-file diff, including routine version bumps (Linux)")
 }
