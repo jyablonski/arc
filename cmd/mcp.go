@@ -131,7 +131,7 @@ one provider's dialect is a warning.`,
 // newMCPManager builds the manager every subcommand uses. It always honors
 // --provider: add and remove sync as their last step, so a filter that applied
 // only to `sync` would silently write to providers the user excluded.
-func newMCPManager(forceConflicts bool) (*mcp.Manager, error) {
+func newMCPManager(cmd *cobra.Command, forceConflicts bool) (*mcp.Manager, error) {
 	paths := mcp.DefaultPaths()
 	providers := mcp.DefaultProviders(paths)
 	if strings.TrimSpace(mcpProvider) != "" {
@@ -149,12 +149,13 @@ func newMCPManager(forceConflicts bool) (*mcp.Manager, error) {
 		Providers: providers,
 		DryRun:    mcpDryRun,
 		Force:     forceConflicts,
+		Log:       stepLog(cmd),
 	}), nil
 }
 
 func runMCPList(cmd *cobra.Command, args []string) error {
 	_ = args
-	m, err := newMCPManager(false)
+	m, err := newMCPManager(cmd, false)
 	if err != nil {
 		return err
 	}
@@ -181,21 +182,22 @@ func runMCPList(cmd *cobra.Command, args []string) error {
 
 func runMCPSync(cmd *cobra.Command, args []string) error {
 	_ = args
-	m, err := newMCPManager(mcpSyncForce)
+	m, err := newMCPManager(cmd, mcpSyncForce)
 	if err != nil {
 		return err
 	}
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	mcpTitle(jsonOut, "arc mcp sync")
 	res, err := m.Sync()
 	if err != nil {
 		return err
 	}
-	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+	if jsonOut {
 		if err := encodeMCPJSON(res); err != nil {
 			return err
 		}
 	} else {
-		output.Header("MCP sync")
-		mcp.PrintSyncHuman(os.Stdout, res)
+		mcp.PrintSyncHuman(output.Live(), res, mcpDryRun)
 	}
 	if res.Failures() > 0 {
 		return fmt.Errorf("%d provider(s) failed to sync", res.Failures())
@@ -208,19 +210,20 @@ func runMCPSync(cmd *cobra.Command, args []string) error {
 
 func runMCPImport(cmd *cobra.Command, args []string) error {
 	_ = args
-	m, err := newMCPManager(false)
+	m, err := newMCPManager(cmd, false)
 	if err != nil {
 		return err
 	}
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	mcpTitle(jsonOut, "arc mcp import")
 	res, err := m.Import()
 	if err != nil {
 		return err
 	}
-	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+	if jsonOut {
 		return encodeMCPJSON(res)
 	}
-	output.Header("MCP import")
-	mcp.PrintImportHuman(os.Stdout, res)
+	mcp.PrintImportHuman(output.Live(), res, mcpDryRun)
 	return nil
 }
 
@@ -232,18 +235,20 @@ func runMCPAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	m, err := newMCPManager(false)
+	m, err := newMCPManager(cmd, false)
 	if err != nil {
 		return err
 	}
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	mcpTitle(jsonOut, "arc mcp add")
 	res, err := m.Add(args[0], server, mcpAddForce)
 	if err != nil {
 		return err
 	}
-	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+	if jsonOut {
 		return encodeMCPJSON(res)
 	}
-	mcp.PrintSyncHuman(os.Stdout, res)
+	mcp.PrintSyncHuman(output.Live(), res, mcpDryRun)
 	if res.Conflicts() > 0 {
 		return ErrMCPConflict
 	}
@@ -254,24 +259,26 @@ func runMCPRemove(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("exactly one MCP configuration entry name is required")
 	}
-	m, err := newMCPManager(false)
+	m, err := newMCPManager(cmd, false)
 	if err != nil {
 		return err
 	}
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	mcpTitle(jsonOut, "arc mcp remove")
 	res, err := m.Remove(args[0])
 	if err != nil {
 		return err
 	}
-	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+	if jsonOut {
 		return encodeMCPJSON(res)
 	}
-	mcp.PrintSyncHuman(os.Stdout, res)
+	mcp.PrintSyncHuman(output.Live(), res, mcpDryRun)
 	return nil
 }
 
 func runMCPValidate(cmd *cobra.Command, args []string) error {
 	_ = args
-	m, err := newMCPManager(false)
+	m, err := newMCPManager(cmd, false)
 	if err != nil {
 		return err
 	}
@@ -279,13 +286,19 @@ func runMCPValidate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	var fatal int
+	for _, issue := range issues {
+		if issue.Fatal {
+			fatal++
+		}
+	}
+
 	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
 		if err := encodeMCPJSON(issues); err != nil {
 			return err
 		}
-	} else if len(issues) == 0 {
-		output.Success("all MCP configuration entries valid")
 	} else {
+		output.Title("arc mcp validate", "")
 		for _, issue := range issues {
 			label := issue.Server
 			if issue.Provider != "" {
@@ -298,12 +311,13 @@ func runMCPValidate(cmd *cobra.Command, args []string) error {
 				output.Warning(msg)
 			}
 		}
-	}
-
-	var fatal int
-	for _, issue := range issues {
-		if issue.Fatal {
-			fatal++
+		switch {
+		case len(issues) == 0:
+			output.Summary(output.GlyphOK, "all MCP configuration entries valid")
+		case fatal > 0:
+			output.Summary(output.GlyphFail, output.Count(fatal, "invalid entry", "invalid entries"), countPart(len(issues)-fatal, "warnings"))
+		default:
+			output.Summary(output.GlyphWarn, output.Count(len(issues), "warning", "warnings"))
 		}
 	}
 	if fatal > 0 {
@@ -376,6 +390,23 @@ func parseKeyValueFlags(pairs []string, flag string) (map[string]string, error) 
 		out[strings.TrimSpace(key)] = value
 	}
 	return out, nil
+}
+
+// stepLog is where a manager reports its steps: the terminal stream normally,
+// stderr under --json so stdout carries nothing but the JSON document.
+func stepLog(cmd *cobra.Command) *output.Stream {
+	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+		return output.NewStream(os.Stderr)
+	}
+	return output.Live()
+}
+
+// mcpTitle opens a mutating subcommand's human output before the manager
+// runs, so the manager's own step lines land under the title.
+func mcpTitle(jsonOut bool, title string) {
+	if !jsonOut {
+		output.Title(title, dryRunMeta(mcpDryRun))
+	}
 }
 
 func encodeMCPJSON(v any) error {

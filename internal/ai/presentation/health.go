@@ -2,11 +2,11 @@ package presentation
 
 import (
 	"fmt"
-	"os"
+	"io"
 	"sort"
 	"strings"
+	"time"
 
-	"github.com/fatih/color"
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/jyablonski/arc/internal/output"
 )
@@ -15,14 +15,17 @@ import (
 // used by "arc ai usage"/"ai tokens"; machine-wide checks ("local") come last.
 var healthSectionRank = map[string]int{"claude": 0, "codex": 1, "cursor": 2, "local": 3}
 
-func PrintHealth(report ai.HealthReport) {
-	oldOut := color.Output
-	color.Output = os.Stdout
-	defer func() { color.Output = oldOut }()
-
-	output.SectionAccent("AI health", providerAccent("claude"))
+// PrintHealth renders every check in one grid ordered by provider, lists the
+// fix for each non-OK check beneath it, and closes with a verdict line.
+func PrintHealth(w io.Writer, report ai.HealthReport) {
+	style := output.StyleFor(w)
+	meta := output.Timestamp(report.FetchedAt)
+	if report.FetchedAt.IsZero() {
+		meta = output.Timestamp(time.Now())
+	}
+	sc := &output.Screen{W: w, Style: style, Title: "arc ai health", Meta: meta}
 	if len(report.Checks) == 0 {
-		output.Info("no health checks ran")
+		sc.Flush(style.Glyph(output.GlyphInfo) + " no health checks ran")
 		return
 	}
 
@@ -31,38 +34,56 @@ func PrintHealth(report ai.HealthReport) {
 		return healthRank(checks[i]) < healthRank(checks[j])
 	})
 
-	headers := []string{"status", "provider", "check", "detail"}
-	rows := make([][]string, 0, len(checks))
+	grid := output.Grid{Columns: []output.Column{
+		{Align: output.AlignCenter},
+		{Header: "provider"},
+		{Header: "check"},
+		{Header: "detail", Flex: true},
+	}}
+	var notes []output.Note
+	warned, failed := 0, 0
 	for _, c := range checks {
 		section, label := healthSection(c)
 		provider := strings.ToLower(section)
-		rows = append(rows, []string{
-			healthMark(c.Status),
-			providerAccent(provider).Sprint(provider),
-			label,
-			c.Detail,
-		})
+		grid.Rows = append(grid.Rows, []string{style.Glyph(healthGlyph(c.Status)), provider, label, c.Detail})
+		switch c.Status {
+		case ai.HealthWarn:
+			warned++
+		case ai.HealthFail:
+			failed++
+		}
+		// The common all-green case lists no hints.
+		if c.Status != ai.HealthOK && c.Hint != "" {
+			notes = append(notes, output.Note{Glyph: healthGlyph(c.Status), Label: provider + "/" + label, Detail: c.Hint})
+		}
 	}
-	output.Table(headers, rows)
-
-	printHealthHints(checks)
+	sc.Grid(grid)
+	if len(notes) > 0 {
+		sc.Blank()
+		sc.Notes(notes)
+	}
+	sc.Flush(healthVerdict(style, len(checks), warned, failed))
 }
 
-// printHealthHints lists the actionable hint for each non-OK check beneath the
-// table. The common all-green case prints nothing.
-func printHealthHints(checks []ai.HealthCheck) {
-	printedHeader := false
-	for _, c := range checks {
-		if c.Status == ai.HealthOK || c.Hint == "" {
-			continue
-		}
-		if !printedHeader {
-			output.Print("")
-			printedHeader = true
-		}
-		section, label := healthSection(c)
-		output.Print(fmt.Sprintf("  %s %s/%s: %s", healthMark(c.Status), strings.ToLower(section), label, c.Hint))
+func healthVerdict(style output.Style, total, warned, failed int) string {
+	glyph := output.GlyphOK
+	var parts []string
+	if failed > 0 {
+		glyph = output.GlyphFail
+		parts = append(parts, fmt.Sprintf("%d failed", failed))
 	}
+	if warned > 0 {
+		if failed == 0 {
+			glyph = output.GlyphWarn
+		}
+		parts = append(parts, output.Count(warned, "warning", "warnings"))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, fmt.Sprintf("all %s passed", output.Count(total, "check", "checks")))
+	} else {
+		parts = append(parts, output.Count(total, "check", "checks"))
+	}
+	return style.Glyph(glyph) + " " + strings.Join(parts, style.Sep())
 }
 
 // healthSection maps a check to its display section and row label: provider
@@ -84,15 +105,13 @@ func healthRank(c ai.HealthCheck) int {
 	return len(healthSectionRank)
 }
 
-func healthMark(s ai.HealthStatus) string {
+func healthGlyph(s ai.HealthStatus) output.Glyph {
 	switch s {
 	case ai.HealthOK:
-		return color.New(color.FgGreen).Sprint("✓")
-	case ai.HealthWarn:
-		return color.New(color.FgYellow).Sprint("!")
+		return output.GlyphOK
 	case ai.HealthFail:
-		return color.New(color.FgRed).Sprint("✗")
+		return output.GlyphFail
 	default:
-		return "?"
+		return output.GlyphWarn
 	}
 }

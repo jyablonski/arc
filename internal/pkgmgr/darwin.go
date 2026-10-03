@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/brew"
@@ -30,24 +32,26 @@ func (darwinManager) UpdateSystem(opts UpdateOptions) error {
 		return shell.NewErrToolNotAvailable("brew")
 	}
 
-	output.Info("Updating Homebrew...")
+	started := time.Now()
+	output.Title("arc update system", output.Timestamp(started))
+	output.Section("homebrew update")
 	if err := run.RunInteractive("brew", "update"); err != nil {
 		return fmt.Errorf("brew update failed: %w", err)
 	}
 
-	output.Info("Upgrading Homebrew packages...")
+	output.Section("homebrew upgrade")
 	if err := run.RunInteractive("brew", "upgrade"); err != nil {
 		return fmt.Errorf("brew upgrade failed: %w", err)
 	}
 
 	if !opts.SkipCache {
-		output.Info("Cleaning Homebrew cache...")
+		output.Section("homebrew cleanup")
 		if err := run.RunInteractive("brew", "cleanup"); err != nil {
 			return fmt.Errorf("brew cleanup failed: %w", err)
 		}
 	}
 
-	output.Success("Homebrew update complete")
+	output.Summary(output.GlyphOK, "homebrew update complete", output.Duration(time.Since(started)))
 	return nil
 }
 
@@ -57,19 +61,19 @@ func (darwinManager) Clean(opts CleanOptions) error {
 	}
 
 	if !opts.OrphansOnly {
-		output.Header("cleaning Homebrew cache")
+		output.Section("homebrew cache")
 		if err := run.RunInteractive("brew", "cleanup"); err != nil {
 			return fmt.Errorf("failed to clean Homebrew cache: %w", err)
 		}
-		output.Success("Homebrew cache cleaned")
+		output.Success("homebrew cache cleaned")
 	}
 
 	if !opts.CacheOnly {
-		output.Header("removing unused Homebrew dependencies")
+		output.Section("unused dependencies")
 		if err := run.RunInteractive("brew", "autoremove"); err != nil {
 			return fmt.Errorf("failed to autoremove Homebrew dependencies: %w", err)
 		}
-		output.Success("Homebrew autoremove complete")
+		output.Success("unused dependencies removed")
 	}
 
 	return nil
@@ -137,26 +141,33 @@ func (darwinManager) Packages(opts PackageOptions) error {
 		return encoder.Encode(stats)
 	}
 
-	output.Header("=== Homebrew Formulae ===")
-	fmt.Printf("%d\n\n", stats.Formulae)
-	output.Header("=== Homebrew Casks ===")
-	fmt.Printf("%d\n\n", stats.Casks)
-	output.Header("=== Homebrew Leaves ===")
-	fmt.Printf("%d\n\n", stats.Leaves)
-	output.Header("=== Homebrew Cache Size ===")
-	if stats.CacheSize == "" {
-		fmt.Println("Unavailable")
-	} else {
-		fmt.Println(stats.CacheSize)
+	style := output.StyleFor(os.Stdout)
+	sc := &output.Screen{W: os.Stdout, Style: style, Title: "arc packages", Meta: output.Timestamp(time.Now())}
+	cache := stats.CacheSize
+	if cache == "" {
+		cache = style.Dash()
 	}
-	fmt.Println()
-	output.Header(fmt.Sprintf("=== Leaf Formulae (%d) ===", len(leaves)))
-	if len(leaves) == 0 {
-		fmt.Println("None")
-		return nil
+	sc.Grid(output.Grid{
+		NoHeader: true,
+		Columns:  []output.Column{{}, {Flex: true}},
+		Rows: [][]string{
+			{style.Faint("formulae"), fmt.Sprintf("%d", stats.Formulae)},
+			{style.Faint("casks"), fmt.Sprintf("%d", stats.Casks)},
+			{style.Faint("leaves"), fmt.Sprintf("%d", stats.Leaves)},
+			{style.Faint("cache size"), cache},
+		},
+	})
+	if len(leaves) > 0 {
+		sc.Blank()
+		sc.Line(style.Faint("leaf formulae"))
+		for _, leaf := range leaves {
+			sc.Line(leaf)
+		}
 	}
-	for _, leaf := range leaves {
-		fmt.Println(leaf)
-	}
+	sc.Flush(style.Faint(strings.Join([]string{
+		output.Count(stats.Formulae, "formula", "formulae"),
+		output.Count(stats.Casks, "cask", "casks"),
+		output.Count(stats.Leaves, "leaf", "leaves"),
+	}, style.Sep())))
 	return nil
 }

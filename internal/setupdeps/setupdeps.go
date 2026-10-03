@@ -51,39 +51,39 @@ func (linuxInstaller) Install() error {
 
 	for _, pkg := range packagesToInstall {
 		if run.CommandExists(pkg.checkCmd) {
-			output.Info(fmt.Sprintf("%s (%s) is already installed", pkg.name, pkg.description))
+			output.Info(fmt.Sprintf("%s already installed", pkg.name))
 			continue
 		}
-		output.Info(fmt.Sprintf("Installing %s (%s)...", pkg.name, pkg.description))
+		output.Info(fmt.Sprintf("installing %s (%s)", pkg.name, pkg.description))
 		if err := run.RunInteractive(pkg.installCmd[0], pkg.installCmd[1:]...); err != nil {
-			output.Warning(fmt.Sprintf("Failed to install %s: %v", pkg.name, err))
+			output.Warning(fmt.Sprintf("%s not installed: %v", pkg.name, err))
 		} else {
-			output.Success(fmt.Sprintf("Installed %s", pkg.name))
+			output.Success(fmt.Sprintf("installed %s", pkg.name))
 		}
 	}
 
 	if !run.CommandExists("uv") {
-		output.Info("Installing uv (Python package manager)...")
+		output.Info("installing uv (Python package manager)")
 		curlCmd := exec.Command("sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh")
 		curlCmd.Stdin = os.Stdin
 		curlCmd.Stdout = os.Stdout
 		curlCmd.Stderr = os.Stderr
 		if err := curlCmd.Run(); err != nil {
-			output.Warning(fmt.Sprintf("Failed to install uv: %v", err))
-			output.Info("You may need to add ~/.cargo/bin to your PATH")
+			output.Warning(fmt.Sprintf("uv not installed: %v", err))
+			output.Info("you may need to add ~/.cargo/bin to your PATH")
 		} else {
-			output.Success("Installed uv")
+			output.Success("installed uv")
 			if run.CommandExists("uv") {
 				output.Success("uv is available in PATH")
 			} else {
 				output.Warning("uv was installed but is not in PATH")
-				output.Info("Add this to your ~/.zshrc or ~/.bashrc:")
+				output.Info("add this to your ~/.zshrc or ~/.bashrc:")
 				output.Info("  export PATH=\"$HOME/.cargo/bin:$PATH\"")
-				output.Info("Then restart your shell or run: source ~/.zshrc")
+				output.Info("then restart your shell or run: source ~/.zshrc")
 			}
 		}
 	} else {
-		output.Info("uv is already installed")
+		output.Info("uv already installed")
 	}
 
 	return nil
@@ -94,7 +94,7 @@ type darwinInstaller struct{}
 func (darwinInstaller) Install() error {
 	if !run.CommandExists("brew") {
 		output.Error("Homebrew is required for macOS setup but is not installed")
-		output.Info("Install Homebrew manually, then rerun 'arc setup':")
+		output.Info("install Homebrew manually, then rerun 'arc setup':")
 		output.Info(`  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`)
 		return shell.NewErrToolNotAvailable("brew")
 	}
@@ -112,14 +112,14 @@ func (darwinInstaller) Install() error {
 
 	for _, pkg := range packagesToInstall {
 		if run.CommandExists(pkg.checkCmd) {
-			output.Info(fmt.Sprintf("%s (%s) is already installed", pkg.name, pkg.description))
+			output.Info(fmt.Sprintf("%s already installed", pkg.name))
 			continue
 		}
-		output.Info(fmt.Sprintf("Installing %s (%s)...", pkg.name, pkg.description))
+		output.Info(fmt.Sprintf("installing %s (%s)", pkg.name, pkg.description))
 		if err := run.RunInteractive("brew", "install", pkg.name); err != nil {
-			output.Warning(fmt.Sprintf("Failed to install %s: %v", pkg.name, err))
+			output.Warning(fmt.Sprintf("%s not installed: %v", pkg.name, err))
 		} else {
-			output.Success(fmt.Sprintf("Installed %s", pkg.name))
+			output.Success(fmt.Sprintf("installed %s", pkg.name))
 		}
 	}
 

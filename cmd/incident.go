@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/notify"
@@ -45,22 +46,30 @@ Examples:
 			Severity: incidentSeverity,
 		}
 
-		output.Info(fmt.Sprintf("Sending incident alert: %s [%s] (%s)", title, incidentSeverity, incidentService))
+		style := output.StyleFor(os.Stdout)
+		output.Title("arc incident", incidentSeverity+style.Sep()+incidentService)
+		output.Info(title)
 
-		var sendErrors []error
+		sent := 0
 		for _, n := range notifiers {
 			if err := n.Send(inc); err != nil {
-				output.Warning(fmt.Sprintf("Failed to send to %s: %v", n.Name(), err))
-				sendErrors = append(sendErrors, err)
-			} else {
-				output.Success(fmt.Sprintf("Sent to %s", n.Name()))
+				output.Error(fmt.Sprintf("%s not sent: %v", n.Name(), err))
+				continue
 			}
+			sent++
+			output.Success("sent to " + n.Name())
 		}
 
-		if len(sendErrors) == len(notifiers) {
+		verdict := fmt.Sprintf("alert sent to %d of %s", sent, output.Count(len(notifiers), "channel", "channels"))
+		switch sent {
+		case len(notifiers):
+			output.Summary(output.GlyphOK, verdict)
+		case 0:
+			output.Summary(output.GlyphFail, verdict)
 			return arcerrs.ErrAllNotifiersFailed
+		default:
+			output.Summary(output.GlyphWarn, verdict)
 		}
-
 		return nil
 	},
 }

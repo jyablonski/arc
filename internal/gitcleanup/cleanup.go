@@ -18,8 +18,6 @@ func Run() error {
 		return fmt.Errorf("%w: %w", arcerrs.ErrNotGitRepo, err)
 	}
 
-	output.Header("Cleaning up Git repository")
-
 	currentBranch, err := run.Run("git", "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
@@ -31,27 +29,32 @@ func Run() error {
 		return fmt.Errorf("failed to get merged branches: %w", err)
 	}
 
-	branchesToDelete := filterMergedBranches(mergedOutput, currentBranch)
-
-	if len(branchesToDelete) > 0 {
-		output.Info(fmt.Sprintf("Removing %d merged branches...", len(branchesToDelete)))
-		for _, branch := range branchesToDelete {
-			if _, err := run.Run("git", "branch", "-d", branch); err != nil {
-				output.Warning(fmt.Sprintf("Failed to delete branch %s: %v", branch, err))
-			}
+	output.Title("arc git cleanup", currentBranch)
+	glyph := output.GlyphOK
+	removed := 0
+	for _, branch := range filterMergedBranches(mergedOutput, currentBranch) {
+		if _, err := run.Run("git", "branch", "-d", branch); err != nil {
+			glyph = output.GlyphWarn
+			output.Warning(fmt.Sprintf("%s not removed: %v", branch, err))
+			continue
 		}
-		output.Success(fmt.Sprintf("Removed %d merged branches", len(branchesToDelete)))
-	} else {
-		output.Info("No merged branches to remove")
+		removed++
+		output.Success("removed " + branch)
+	}
+	if removed == 0 && glyph == output.GlyphOK {
+		output.Info("no merged branches to remove")
 	}
 
-	output.Info("Pruning remote references...")
+	pruned := "remotes pruned"
 	if _, err := run.Run("git", "remote", "prune", "origin"); err != nil {
-		output.Warning(fmt.Sprintf("Failed to prune remotes: %v", err))
+		glyph = output.GlyphWarn
+		pruned = "remote prune failed"
+		output.Warning(fmt.Sprintf("remote references not pruned: %v", err))
 	} else {
-		output.Success("Pruned remote references")
+		output.Success("pruned remote references")
 	}
 
+	output.Summary(glyph, output.Count(removed, "merged branch", "merged branches")+" removed", pruned)
 	return nil
 }
 

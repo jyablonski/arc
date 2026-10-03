@@ -32,6 +32,7 @@ Linux uses pacman -Sc and pacman -Rns. macOS uses brew cleanup and brew autoremo
 			return fmt.Errorf("only one of --orphans-only, --cache-only, or --logs-only may be used")
 		}
 
+		output.Title("arc clean", app.Platform.String())
 		if !cleanLogsOnly {
 			if err := app.PkgMgr.Clean(pkgmgr.CleanOptions{
 				OrphansOnly: cleanOrphansOnly,
@@ -41,20 +42,22 @@ Linux uses pacman -Sc and pacman -Rns. macOS uses brew cleanup and brew autoremo
 			}
 		}
 		if selected == 0 || cleanLogsOnly {
-			return runLogCleanup()
+			if err := runLogCleanup(); err != nil {
+				return err
+			}
 		}
+		output.Summary(output.GlyphOK, "clean complete")
 		return nil
 	},
 }
 
 func runLogCleanup() error {
-	output.Header("cleaning Arc logs")
 	result, err := cleanUpdateLogs()
 	if err != nil {
 		return fmt.Errorf("failed to clean Arc update logs: %w", err)
 	}
 	if result.Files == 0 {
-		output.Info("No update logs to remove")
+		output.Info("no update logs to remove")
 		return nil
 	}
 	output.Success(logCleanupMessage(result))
@@ -62,14 +65,7 @@ func runLogCleanup() error {
 }
 
 func logCleanupMessage(result sysupdate.LogCleanupResult) string {
-	return fmt.Sprintf("Removed %d %s (%s)", result.Files, pluralClean(result.Files, "update log", "update logs"), output.Bytes(result.Bytes))
-}
-
-func pluralClean(n int, singular, plural string) string {
-	if n == 1 {
-		return singular
-	}
-	return plural
+	return fmt.Sprintf("removed %s (%s)", output.Count(result.Files, "update log", "update logs"), output.Bytes(result.Bytes))
 }
 
 func init() {

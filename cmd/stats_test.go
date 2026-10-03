@@ -10,20 +10,21 @@ import (
 )
 
 func TestStatsCmd_emptyLog(t *testing.T) {
+	resetJSONFlag(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	defer func() { rootCmd.SetArgs(nil) }()
 
-	// output.Info writes through the color package (bound to the real stdout at
-	// init), so captureStdout can't see the empty-log message; assert that no
-	// table was rendered instead.
 	out := captureStdout(t, func() {
 		rootCmd.SetArgs([]string{"stats"})
 		require.NoError(t, rootCmd.Execute())
 	})
+	require.Contains(t, out, "arc stats")
+	require.Contains(t, out, "no invocations recorded yet")
 	require.NotContains(t, out, "command")
 }
 
 func TestStatsCmd_printsTable(t *testing.T) {
+	resetJSONFlag(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
 	require.NoError(t, stats.Append(stats.Entry{Timestamp: ts, Command: "update system", OK: true, DurationMS: 2000}))
@@ -39,11 +40,15 @@ func TestStatsCmd_printsTable(t *testing.T) {
 	require.Contains(t, out, "failures")
 	require.Contains(t, out, "update system")
 	require.Contains(t, out, "clean")
-	require.Contains(t, out, "3s")
-	require.Contains(t, out, "100ms")
+	require.Contains(t, out, "3.0s")
+	require.Contains(t, out, "0.1s")
+	require.Contains(t, out, "2 commands")
+	require.Contains(t, out, "3 invocations")
+	require.Contains(t, out, "1 failure")
 }
 
 func TestStatsCmd_json(t *testing.T) {
+	resetJSONFlag(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ts := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
 	require.NoError(t, stats.Append(stats.Entry{Timestamp: ts, Command: "packages", OK: true, DurationMS: 42}))
@@ -83,6 +88,8 @@ func TestRecordInvocation_skipsExcludedAndDisabled(t *testing.T) {
 	// Root, help, and stats itself are never tracked.
 	recordInvocation(rootCmd, true, time.Second)
 	recordInvocation(statsCmd, true, time.Second)
+	// cobra adds "help" lazily on the first Execute.
+	rootCmd.InitDefaultHelpCmd()
 	helpCmd, _, err := rootCmd.Find([]string{"help"})
 	require.NoError(t, err)
 	recordInvocation(helpCmd, true, time.Second)

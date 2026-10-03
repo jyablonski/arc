@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/jyablonski/arc/internal/output"
 )
@@ -250,17 +249,4 @@ func formatResets(style output.Style, r usageRow, now time.Time) string {
 		return "now"
 	}
 	return "in " + output.Age(d)
-}
-
-func providerAccent(providerName string) *color.Color {
-	switch providerName {
-	case "claude":
-		return color.RGB(255, 133, 31)
-	case "codex":
-		return color.New(color.FgGreen)
-	case "cursor":
-		return color.New(color.FgHiMagenta)
-	default:
-		return color.New(color.FgCyan, color.Bold)
-	}
 }

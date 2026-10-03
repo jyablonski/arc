@@ -441,6 +441,112 @@ func (sc *Screen) Flush(summary string) {
 	}
 }
 
+// Stream is the live counterpart of Screen, for commands that act as they
+// print and so cannot buffer a body: the same title line and rule, then
+// glyph-led step lines (optionally grouped into sections), then the same
+// closing summary line. A Screen sizes its frame to its content; a Stream
+// cannot see ahead, so its rule is always FrameWidth.
+//
+// A Stream remembers what it has written since its title, so blank lines and
+// the closing verdict stay right however many packages wrote steps to it.
+// Code that reports progress takes a *Stream rather than assuming stdout, so
+// its caller decides where step lines go (stderr when stdout carries JSON).
+type Stream struct {
+	// w is nil for the stdout stream, which resolves os.Stdout at each write.
+	w     io.Writer
+	style Style
+
+	body     bool
+	problems int
+}
+
+// NewStream inspects w once.
+func NewStream(w io.Writer) *Stream {
+	return &Stream{w: w, style: StyleFor(w)}
+}
+
+func (st *Stream) out() (io.Writer, Style) {
+	if st.w == nil {
+		return os.Stdout, StyleFor(os.Stdout)
+	}
+	return st.w, st.style
+}
+
+// Style is how this stream's writer can be drawn to.
+func (st *Stream) Style() Style {
+	_, style := st.out()
+	return style
+}
+
+// Title writes the title line with right-aligned meta, the rule, and the
+// blank line that separates them from the steps.
+func (st *Stream) Title(title, meta string) {
+	w, style := st.out()
+	width := style.frameWidth(0)
+	_, _ = fmt.Fprintln(w, Justify(style.Bold(title), style.Faint(meta), width))
+	_, _ = fmt.Fprintln(w, style.Rule(width))
+	_, _ = fmt.Fprintln(w)
+	st.body, st.problems = false, 0
+}
+
+// Section names the block of steps or raw tool output that follows.
+func (st *Stream) Section(title string) {
+	st.Gap()
+	st.Line(st.Style().Bold(title))
+}
+
+// Step writes one line led by its state glyph.
+func (st *Stream) Step(g Glyph, msg string) {
+	st.Line(st.Style().Glyph(g) + " " + msg)
+	if g == GlyphWarn || g == GlyphFail {
+		st.problems++
+	}
+}
+
+func (st *Stream) Success(msg string) { st.Step(GlyphOK, msg) }
+func (st *Stream) Error(msg string)   { st.Step(GlyphFail, msg) }
+func (st *Stream) Info(msg string)    { st.Step(GlyphInfo, msg) }
+func (st *Stream) Warning(msg string) { st.Step(GlyphWarn, msg) }
+
+// Line writes a body line that is not a step (a grid row).
+func (st *Stream) Line(line string) {
+	w, _ := st.out()
+	_, _ = fmt.Fprintln(w, line)
+	st.body = true
+}
+
+// Gap separates what follows from the body already written; it writes
+// nothing directly under the title.
+func (st *Stream) Gap() {
+	if st.body {
+		w, _ := st.out()
+		_, _ = fmt.Fprintln(w)
+	}
+}
+
+// Summary writes the closing line: a verdict glyph and fragments joined by
+// the shared separator, set off from the body by a blank line. Empty
+// fragments are dropped.
+//
+// A run that printed warning or error steps cannot close as done: an OK
+// verdict is downgraded and says how many, so a step written deep in another
+// package is never contradicted by the line under it.
+func (st *Stream) Summary(g Glyph, parts ...string) {
+	kept := make([]string, 0, len(parts)+1)
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	if g == GlyphOK && st.problems > 0 {
+		g = GlyphWarn
+		kept = append(kept, Count(st.problems, "warning", "warnings"))
+	}
+	st.Gap()
+	w, style := st.out()
+	_, _ = fmt.Fprintln(w, style.Glyph(g)+" "+strings.Join(kept, style.Sep()))
+}
+
 // TildePath abbreviates the home directory to ~ for display.
 func TildePath(path string) string {
 	home, err := os.UserHomeDir()

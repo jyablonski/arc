@@ -152,6 +152,8 @@ func TestUpgrade_devVersionIsNoop(t *testing.T) {
 }
 
 func TestUpgrade_alreadyLatest(t *testing.T) {
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		rel := Release{
@@ -169,7 +171,7 @@ func TestUpgrade_alreadyLatest(t *testing.T) {
 	u := New()
 	u.APIBase = server.URL
 	require.NoError(t, u.Upgrade(&buf, "v1.0.0"))
-	require.Contains(t, buf.String(), "latest version of arc")
+	require.Contains(t, buf.String(), "✓ already on the latest version (v1.0.0)")
 }
 
 func TestUpgrade_missingReleaseAsset(t *testing.T) {
@@ -204,6 +206,8 @@ func TestUpgrade_apiError(t *testing.T) {
 }
 
 func TestUpgrade_downloadsNewVersion(t *testing.T) {
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
 	tmp := t.TempDir()
 	binPath := filepath.Join(tmp, "arc")
 	require.NoError(t, os.WriteFile(binPath, []byte("old"), filemode.Executable))
@@ -236,7 +240,7 @@ func TestUpgrade_downloadsNewVersion(t *testing.T) {
 	u := New()
 	u.APIBase = api.URL
 	require.NoError(t, u.Upgrade(&buf, "v0.1.0"))
-	require.Contains(t, buf.String(), "Upgraded arc")
+	require.Contains(t, buf.String(), "✓ upgraded arc v0.1.0 → v2.0.0")
 
 	got, err := os.ReadFile(binPath)
 	require.NoError(t, err)

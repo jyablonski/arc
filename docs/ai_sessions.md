@@ -2,12 +2,14 @@
 
 `arc ai sessions` lists recent Claude Code and Codex sessions from the same local logs used by [`arc ai tokens`](ai_tokens.md). It is offline, read-only, and does not upload transcripts.
 
-Rows are led by age, which is also the sort key, then session ID, provider, model, message count, token count, project, and a title or first-prompt preview. The title fills the remaining terminal width. Cells with nothing to show are marked with `—` rather than left blank.
+Rows are led by age, which is also the sort key, then session ID, provider, model, message count, token count, API-equivalent cost, project, and a title or first-prompt preview. The title fills the remaining terminal width. Cells with nothing to show are marked with `—` rather than left blank.
 
-Automated sessions — Codex auto-review runs, which nobody resumes — are hidden by default and counted in the closing line, alongside how many sessions matched before `--limit` and the token total of what was shown:
+The `api equiv` column is the same estimate [`arc ai tokens`](ai_tokens.md) reports: what the session's tokens would cost at pay-as-you-go API rates, using the layered pricing refreshed by `arc ai pricing`. A session that switched models is priced at each model's own rate. A model with no known price shows `—`. In `--json` output the value is `cost_usd`.
+
+Automated sessions — Codex auto-review runs, which nobody resumes — are hidden by default and counted in the closing line, alongside how many sessions matched before `--limit` and the token and cost totals of what was shown:
 
 ```
-8 of 20 sessions (--limit 0 for all) · 12 auto-review hidden (--all) · 87.1M tokens
+8 of 20 sessions (--limit 0 for all) · 12 auto-review hidden (--all) · 87.1M tokens · $41.20 api equiv
 ```
 
 ## Command

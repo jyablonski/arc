@@ -114,3 +114,28 @@ func TestRunSessionProviders_matchedCountsBeforeLimit(t *testing.T) {
 	require.Len(t, report.Sessions, 1)
 	require.Equal(t, 3, report.Matched)
 }
+
+func TestRunSessionProviders_pricesEachModelAtItsOwnRate(t *testing.T) {
+	at := ts("2026-06-01T10:00:00Z")
+	folded := FoldSessions([]TokenRecord{
+		{Provider: "codex", SessionID: "x1", Model: "gpt-5", Timestamp: at, Tokens: TokenBreakdown{Input: 1_000_000}},
+		{Provider: "codex", SessionID: "x1", Model: "gpt-5.5", Timestamp: at.Add(time.Minute), Tokens: TokenBreakdown{Input: 1_000_000}},
+	})
+	codex := fakeSessionProvider("codex", []SessionSummary{
+		*folded["x1"],
+		{Provider: "codex", SessionID: "x2", Model: "gpt-5", Tokens: TokenBreakdown{Input: 2_000_000}, LastAt: at},
+		{Provider: "codex", SessionID: "x3", Model: "no-such-model", Tokens: TokenBreakdown{Input: 1_000_000}, LastAt: at.Add(-time.Hour)},
+	}, nil)
+
+	report := RunSessionProviders(context.Background(), []SessionProvider{codex}, nil, SessionOptions{Pricer: defaultPricer()})
+	require.Len(t, report.Sessions, 3)
+	// gpt-5 at $1.25/M plus gpt-5.5 at $5/M, not 2M at the last model's rate.
+	require.Equal(t, "gpt-5.5", report.Sessions[0].Model)
+	require.InDelta(t, 6.25, report.Sessions[0].CostUSD, 1e-9)
+	// A summary without a per-model split falls back to its model and total.
+	require.InDelta(t, 2.5, report.Sessions[1].CostUSD, 1e-9)
+	require.Zero(t, report.Sessions[2].CostUSD)
+
+	unpriced := RunSessionProviders(context.Background(), []SessionProvider{codex}, nil, SessionOptions{})
+	require.Zero(t, unpriced.Sessions[0].CostUSD)
+}

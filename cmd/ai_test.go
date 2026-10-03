@@ -14,7 +14,7 @@ import (
 
 func resetAIUsageCLIState(t *testing.T) {
 	t.Helper()
-	require.NoError(t, rootCmd.PersistentFlags().Set("json", "false"))
+	resetJSONFlag(t)
 	require.NoError(t, aiUsageCmd.Flags().Set("provider", ""))
 	require.NoError(t, aiUsageCmd.Flags().Set("no-cache", "false"))
 	require.NoError(t, aiTokensCmd.Flags().Set("provider", ""))

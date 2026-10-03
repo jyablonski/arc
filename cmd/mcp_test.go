@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -258,5 +259,64 @@ func TestMCPValidateCmd_CleanCanonical(t *testing.T) {
 
 	if err := mcpValidateCmd.RunE(mcpValidateCmd, nil); err != nil {
 		t.Errorf("validate: %v", err)
+	}
+}
+
+// Step lines used to share stdout with the JSON document, so anything parsing
+// `arc mcp add … -j` choked on "· write ctx7 to …" before the opening brace.
+func TestMCPCmds_jsonKeepsStdoutPure(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"add", []string{"mcp", "add", "ctx7", "--command", "uvx", "--arg", "context7-mcp", "-j"}},
+		{"sync", []string{"mcp", "sync", "-j"}},
+		{"remove", []string{"mcp", "remove", "ctx7", "-j"}},
+	}
+	root := setupMCPEnv(t)
+	resetMCPFlags()
+	t.Cleanup(resetMCPFlags)
+	resetJSONFlag(t)
+	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "xdg-state"))
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.name == "sync" {
+				// Give sync something to report: a second entry not yet written.
+				writeFile(t, filepath.Join(root, "ai", "mcp.json"),
+					`{"mcpServers":{"ctx7":{"type":"stdio","command":"uvx","args":["context7-mcp"]},"docs":{"type":"stdio","command":"uvx"}}}`)
+			}
+			oldStderr := os.Stderr
+			errR, errW, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stderr = errW
+			var runErr error
+			stdout := captureStdout(t, func() {
+				rootCmd.SetArgs(tt.args)
+				runErr = rootCmd.Execute()
+			})
+			os.Stderr = oldStderr
+			_ = errW.Close()
+			stderr, _ := io.ReadAll(errR)
+			if runErr != nil {
+				t.Fatalf("%s: %v", tt.name, runErr)
+			}
+
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+				t.Fatalf("stdout is not a single JSON document: %v\n%s", err, stdout)
+			}
+			if !strings.Contains(string(stderr), "· ") {
+				t.Errorf("step lines should be reported on stderr, got %q", stderr)
+			}
+			if strings.Contains(string(stderr), "arc mcp") {
+				t.Errorf("no title is drawn in JSON mode, got %q", stderr)
+			}
+		})
 	}
 }

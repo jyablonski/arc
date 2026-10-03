@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -11,12 +13,11 @@ var setupCmd = &cobra.Command{
 	Long: `Install required packages and tools needed for arc to function properly.
 This includes uv, gh (GitHub CLI), fastfetch, and other system utilities.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		output.Header("Setting up arc dependencies")
+		output.Title("arc setup", app.Platform.String())
 		if err := app.Setup.Install(); err != nil {
 			return err
 		}
-		output.Header("Setup complete")
-		output.Info("Run 'arc validate' to check if all dependencies are available")
+		output.Summary(output.GlyphOK, "setup complete", output.StyleFor(os.Stdout).Faint("arc validate"))
 		return nil
 	},
 }

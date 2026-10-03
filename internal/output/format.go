@@ -2,12 +2,8 @@ package output
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"regexp"
-	"strings"
-
-	"github.com/fatih/color"
 )
 
 // ansiPattern matches SGR escape sequences (e.g. color codes) so table layout
@@ -19,41 +15,29 @@ func visibleWidth(s string) int {
 	return len([]rune(ansiPattern.ReplaceAllString(s, "")))
 }
 
-var (
-	headerColor  = color.New(color.FgCyan, color.Bold)
-	successColor = color.New(color.FgGreen, color.Bold)
-	errorColor   = color.New(color.FgRed, color.Bold)
-	infoColor    = color.New(color.FgBlue)
-	warningColor = color.New(color.FgYellow)
-)
+// live is the stdout stream behind the package-level helpers, for commands
+// and internal packages that only ever report to the terminal. Code that can
+// also run under --json takes a *Stream instead (see Stream).
+var live = &Stream{}
 
-func Header(s string) {
-	fmt.Println()
-	_, _ = headerColor.Println(s)
-	fmt.Println(strings.Repeat("─", len([]rune(s))))
-}
+// Live returns the stdout stream the package-level helpers write to.
+func Live() *Stream { return live }
 
-// SectionAccent prints a titled block with underline in the given ANSI style (stdout).
-func SectionAccent(title string, accent *color.Color) {
-	fmt.Println()
-	_, _ = accent.Fprintf(os.Stdout, "%s\n", title)
-	_, _ = accent.Fprintf(os.Stdout, "%s\n", strings.Repeat("─", len(title)))
-}
+func Title(title, meta string)         { live.Title(title, meta) }
+func Section(title string)             { live.Section(title) }
+func Summary(g Glyph, parts ...string) { live.Summary(g, parts...) }
+func Success(s string)                 { live.Success(s) }
+func Error(s string)                   { live.Error(s) }
+func Info(s string)                    { live.Info(s) }
+func Warning(s string)                 { live.Warning(s) }
 
-func Success(s string) {
-	_, _ = successColor.Printf("✓ %s\n", s)
-}
-
-func Error(s string) {
-	_, _ = errorColor.Printf("✗ %s\n", s)
-}
-
-func Info(s string) {
-	_, _ = infoColor.Printf("i %s\n", s)
-}
-
-func Warning(s string) {
-	_, _ = warningColor.Printf("⚠ %s\n", s)
+// Failure writes a command's returned error to stderr as the closing line,
+// set off from any steps above it.
+func Failure(err error) {
+	if live.body {
+		fmt.Fprintln(os.Stderr)
+	}
+	NewStream(os.Stderr).Error(err.Error())
 }
 
 // Bytes formats a byte count using binary units.
@@ -73,37 +57,4 @@ func Bytes(n int64) string {
 	default:
 		return fmt.Sprintf("%d B", n)
 	}
-}
-
-func Print(s string) {
-	fmt.Println(s)
-}
-
-// Table prints a left-aligned table to stdout in arc's canonical grid format
-// (see Grid): lowercase headers, a two-space gutter, and no underline rule.
-// Commands that need alignment control, glyph columns, or a flex column should
-// build a Grid directly.
-func Table(headers []string, rows [][]string) {
-	FprintTable(os.Stdout, headers, rows)
-}
-
-// FprintTable writes a canonical table (see Table) to an arbitrary writer.
-func FprintTable(w io.Writer, headers []string, rows [][]string) {
-	for _, line := range tableGrid(headers, rows).Lines(StyleFor(w), 0) {
-		_, _ = fmt.Fprintln(w, line)
-	}
-}
-
-// TableLines renders a canonical table (see Table) as plain lines without
-// printing them, for callers that need to embed or test the output.
-func TableLines(headers []string, rows [][]string) []string {
-	return tableGrid(headers, rows).Lines(Style{Unicode: true}, 0)
-}
-
-func tableGrid(headers []string, rows [][]string) Grid {
-	cols := make([]Column, len(headers))
-	for i, h := range headers {
-		cols[i] = Column{Header: h}
-	}
-	return Grid{Columns: cols, Rows: rows}
 }

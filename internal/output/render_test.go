@@ -128,3 +128,17 @@ func TestGrid_clampsRowsToMaxWidth(t *testing.T) {
 		assert.LessOrEqual(t, visibleWidth(line), 12, line)
 	}
 }
+
+func TestStream_asciiAndNarrowTerminal(t *testing.T) {
+	var buf bytes.Buffer
+	st := &Stream{w: &buf, style: Style{Width: 40}}
+	st.Title("arc docker clean", "")
+	st.Step(GlyphWarn, "volumes failed")
+	st.Summary(GlyphWarn, "1 of 3 prunes failed", "arc docker clean")
+	lines := strings.Split(buf.String(), "\n")
+	require.Equal(t, "arc docker clean", lines[0])
+	// The rule narrows to the terminal and falls back to ASCII with the glyphs.
+	require.Equal(t, strings.Repeat("-", 40), lines[1])
+	require.Equal(t, "! volumes failed", lines[3])
+	require.Equal(t, "! 1 of 3 prunes failed | arc docker clean", lines[5])
+}

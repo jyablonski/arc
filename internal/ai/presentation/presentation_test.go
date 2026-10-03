@@ -2,62 +2,13 @@ package presentation
 
 import (
 	"bytes"
-	"io"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/stretchr/testify/require"
 )
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	oldNoColor := color.NoColor
-	color.NoColor = true
-	defer func() { color.NoColor = oldNoColor }()
-
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stdout = w
-
-	var buf syncBuffer
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_, _ = io.Copy(&buf, r)
-		_ = r.Close()
-	}()
-
-	fn()
-	require.NoError(t, w.Close())
-	os.Stdout = oldStdout
-	wg.Wait()
-	return buf.String()
-}
-
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf []byte
-}
-
-func (s *syncBuffer) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.buf = append(s.buf, p...)
-	return len(p), nil
-}
-
-func (s *syncBuffer) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return string(s.buf)
-}
 
 func renderUsage(t *testing.T, agg ai.AggregateReport, opts UsageOptions) string {
 	t.Helper()

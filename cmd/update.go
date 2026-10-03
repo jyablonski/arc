@@ -97,12 +97,13 @@ var updateUvCmd = &cobra.Command{
 			return shell.NewErrToolNotAvailable("uv")
 		}
 
-		output.Info("Updating uv...")
+		output.Title("arc update uv", "")
+		output.Section("uv self update")
 		if err := run.RunInteractive("uv", "self", "update"); err != nil {
 			return fmt.Errorf("failed to update uv: %w", err)
 		}
 
-		output.Success("uv updated successfully")
+		output.Summary(output.GlyphOK, "uv updated")
 		return nil
 	},
 }

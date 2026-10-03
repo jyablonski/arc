@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/jyablonski/arc/internal/output"
 )
 
 const (
@@ -81,13 +83,16 @@ func (u *Updater) Upgrade(w io.Writer, currentVersion string) error {
 		return nil
 	}
 
+	st := output.NewStream(w)
+	st.Title("arc update self", currentVersion)
+
 	latestRelease, err := u.GetLatestRelease()
 	if err != nil {
 		return fmt.Errorf("failed to get latest release: %w", err)
 	}
 
 	if CompareVersions(currentVersion, latestRelease.TagName) >= 0 {
-		_, _ = fmt.Fprintf(w, "success: You're on the latest version of arc (%s)\n", latestRelease.TagName)
+		st.Step(output.GlyphOK, fmt.Sprintf("already on the latest version (%s)", latestRelease.TagName))
 		return nil
 	}
 
@@ -114,7 +119,7 @@ func (u *Updater) Upgrade(w io.Writer, currentVersion string) error {
 	}
 
 	releaseURL := fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", u.owner(), u.repo(), latestRelease.TagName)
-	_, _ = fmt.Fprintf(w, "success: Upgraded arc from %s to %s! %s\n", currentVersion, latestRelease.TagName, releaseURL)
+	st.Step(output.GlyphOK, fmt.Sprintf("upgraded arc %s %s %s", currentVersion, st.Style().Arrow(), latestRelease.TagName)+st.Style().Sep()+st.Style().Faint(releaseURL))
 	return nil
 }
 

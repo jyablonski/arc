@@ -113,7 +113,9 @@ var aiSessionsCmd = &cobra.Command{
 	Short: "List recent local Claude and Codex sessions",
 	Long: `Lists recent Claude Code and Codex sessions, newest first, from the same
 local JSONL logs that back "arc ai tokens". Shows each session's project,
-model, message count, token total, and a title or first-prompt preview.
+model, message count, token total, API-equivalent cost, and a title or
+first-prompt preview. Cost uses the same pricing as "arc ai tokens"; refresh
+it with "arc ai pricing".
 
 Fully offline: no network calls and nothing is written. Use --resume to also
 print the command that reopens each session in its own tool.`,
@@ -195,7 +197,7 @@ func runAITokens(cmd *cobra.Command, args []string) error {
 		}
 		return ai.ExitErrorIfAllHistoryProvidersFailed(report)
 	}
-	presentation.PrintHistory(report, presentation.HistoryPrintOptions{ShowTotalTokens: aiTokensShowTotalTokens})
+	presentation.PrintHistory(os.Stdout, report, presentation.HistoryPrintOptions{ShowTotalTokens: aiTokensShowTotalTokens, Now: time.Now()})
 	return ai.ExitErrorIfAllHistoryProvidersFailed(report)
 }
 
@@ -219,7 +221,7 @@ func runAIHealth(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		presentation.PrintHealth(report)
+		presentation.PrintHealth(os.Stdout, report)
 	}
 	if report.HasFailure() {
 		return arcerrs.ErrHealthCheckFailed
@@ -240,8 +242,11 @@ func localHealthCheckers() []ai.HealthChecker {
 // config across providers.
 func globalHealthChecks() []ai.HealthCheck {
 	checks := []ai.HealthCheck{pricingCacheCheck()}
-	checks = append(checks, configSyncChecks()...)
-	return append(checks, mcp.HealthChecks(mcp.New(mcp.Config{}))...)
+	// These managers only read state for a check row; anything they report
+	// along the way goes to stderr, never into the screen or the JSON.
+	log := output.NewStream(os.Stderr)
+	checks = append(checks, configSyncChecks(log)...)
+	return append(checks, mcp.HealthChecks(mcp.New(mcp.Config{Log: log}))...)
 }
 
 func pricingCacheCheck() ai.HealthCheck {
@@ -270,9 +275,9 @@ func pricingCacheCheck() ai.HealthCheck {
 	return c
 }
 
-func configSyncChecks() []ai.HealthCheck {
+func configSyncChecks(log *output.Stream) []ai.HealthCheck {
 	paths := skills.DefaultPaths()
-	m := skills.New(skills.Config{})
+	m := skills.New(skills.Config{Log: log})
 	var checks []ai.HealthCheck
 
 	if _, err := os.Stat(paths.SkillsRoot); err == nil {
@@ -335,6 +340,7 @@ func runAISessions(cmd *cobra.Command, args []string) error {
 		Search: strings.TrimSpace(aiSessionsSearch),
 
 		IncludeAutomated: aiSessionsAll,
+		Pricer:           ai.NewLayeredPricer(),
 	}
 
 	report := ai.RunSessionProviders(cmd.Context(), localSessionProviders(), filters, opts)
@@ -396,24 +402,34 @@ func runAIPricing(cmd *cobra.Command, args []string) error {
 func printPricingSummary(source string, prices map[string]ai.ModelPrice, added []string, now time.Time) error {
 	path, _ := ai.PricingCachePath()
 	overridePath, _ := ai.PricingOverridePath()
+	style := output.StyleFor(os.Stdout)
+	models := output.Count(len(prices), "model", "models")
 
+	output.Title("arc ai pricing", output.Timestamp(now))
+	output.Info("source " + source)
 	if aiPricingDryRun {
-		output.Info(fmt.Sprintf("Dry run: %d models from %s (cache not written)", len(prices), source))
+		output.Info("dry run: cache not written")
 	} else {
-		output.Success(fmt.Sprintf("Cached %d models from %s", len(prices), source))
-		output.Print(fmt.Sprintf("  written to %s at %s", path, now.Format(time.RFC3339)))
+		output.Success("cache written to " + output.TildePath(path))
 	}
 	if len(added) > 0 {
 		shown := added
 		if len(shown) > 10 {
 			shown = shown[:10]
 		}
-		output.Print(fmt.Sprintf("  new since last refresh (%d): %s", len(added), strings.Join(shown, ", ")))
+		line := "new since last refresh: " + strings.Join(shown, ", ")
 		if len(added) > len(shown) {
-			output.Print(fmt.Sprintf("  …and %d more", len(added)-len(shown)))
+			line += fmt.Sprintf(" and %d more", len(added)-len(shown))
 		}
+		output.Info(line)
 	}
-	output.Print(fmt.Sprintf("  hand-edit %s to add or override models (always wins)", overridePath))
+	output.Info("overrides in " + output.TildePath(overridePath) + " always win")
+
+	verdict := models + " cached"
+	if aiPricingDryRun {
+		verdict = models + " fetched"
+	}
+	output.Summary(output.GlyphOK, verdict, countPart(len(added), "new"), style.Faint("arc ai tokens"))
 	return nil
 }
 

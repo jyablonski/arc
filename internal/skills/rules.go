@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/jyablonski/arc/internal/filemode"
-	"github.com/jyablonski/arc/internal/output"
 )
 
 type RulesEntry struct {
@@ -36,13 +35,13 @@ func (m *Manager) SyncRules() (int, error) {
 		target := p.RulesFile
 		parent := filepath.Dir(target)
 		if err := m.mkdirAll(parent, filemode.Dir); err != nil {
-			output.Warning(fmt.Sprintf("%s: mkdir %s: %v", p.Name, parent, err))
+			m.log.Warning(fmt.Sprintf("%s: mkdir %s: %v", p.Name, parent, err))
 			continue
 		}
 		info, err := os.Lstat(target)
 		if err == nil {
 			if info.Mode()&os.ModeSymlink == 0 {
-				output.Warning(fmt.Sprintf("%s: %s is a real file (manual review)", p.Name, target))
+				m.log.Warning(fmt.Sprintf("%s: %s is a real file (manual review)", p.Name, target))
 				conflicts++
 				continue
 			}
@@ -54,30 +53,29 @@ func (m *Manager) SyncRules() (int, error) {
 			canonicalAbs, _ := filepath.Abs(canonical)
 			resolvedAbs, _ := filepath.Abs(resolved)
 			if resolvedAbs == canonicalAbs {
-				output.Info(fmt.Sprintf("ok: %s -> %s", target, canonical))
 				continue
 			}
 			m.announce("replace stale symlink %s (was -> %s)", target, linkTarget)
 			if !m.dryRun {
 				if rerr := m.fs.Remove(target); rerr != nil {
-					output.Warning(fmt.Sprintf("%s: remove stale %s: %v", p.Name, target, rerr))
+					m.log.Warning(fmt.Sprintf("%s: remove stale %s: %v", p.Name, target, rerr))
 					continue
 				}
 				if serr := m.fs.Symlink(canonical, target); serr != nil {
-					output.Warning(fmt.Sprintf("%s: symlink %s: %v", p.Name, target, serr))
+					m.log.Warning(fmt.Sprintf("%s: symlink %s: %v", p.Name, target, serr))
 					continue
 				}
 			}
 			continue
 		}
 		if !os.IsNotExist(err) {
-			output.Warning(fmt.Sprintf("%s: lstat %s: %v", p.Name, target, err))
+			m.log.Warning(fmt.Sprintf("%s: lstat %s: %v", p.Name, target, err))
 			continue
 		}
 		m.announce("create symlink %s -> %s", target, canonical)
 		if !m.dryRun {
 			if serr := m.fs.Symlink(canonical, target); serr != nil {
-				output.Warning(fmt.Sprintf("%s: symlink %s: %v", p.Name, target, serr))
+				m.log.Warning(fmt.Sprintf("%s: symlink %s: %v", p.Name, target, serr))
 				continue
 			}
 		}
