@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/jyablonski/arc/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,12 @@ Use --component to show only a specific component.`,
 		if partsComponent != "" {
 			components = []string{partsComponent}
 		}
-		return app.Hardware.Show(components)
+		output.Title("arc parts", app.Platform.String())
+		if err := app.Hardware.Show(components); err != nil {
+			return err
+		}
+		output.Summary(output.GlyphInfo, output.Count(len(components), "component", "components"))
+		return nil
 	},
 }
 

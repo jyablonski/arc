@@ -33,21 +33,21 @@ func (linuxReporter) Show(components []string) error {
 	for _, comp := range components {
 		switch comp {
 		case "mobo":
-			output.Header("motherboard is")
+			output.Section("motherboard")
 			result, err := run.RunSudo("dmidecode", "-t", "2")
 			if err != nil {
 				return fmt.Errorf("failed to get motherboard info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		case "cpu":
-			output.Header("cpu is")
+			output.Section("cpu")
 			result, err := run.RunSudo("dmidecode", "-t", "4")
 			if err != nil {
 				return fmt.Errorf("failed to get CPU info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		case "gpu":
-			output.Header("gpu is")
+			output.Section("gpu")
 			pciOutput, err := run.Run("lspci")
 			if err != nil {
 				return fmt.Errorf("failed to get GPU PCI info: %w", err)
@@ -61,7 +61,7 @@ func (linuxReporter) Show(components []string) error {
 					if len(parts) > 0 {
 						gpuInfo, err := run.Run("lspci", "-v", "-s", parts[0])
 						if err == nil {
-							fmt.Println(gpuInfo)
+							fmt.Println(strings.TrimRight(gpuInfo, "\n"))
 						}
 					}
 				}
@@ -70,19 +70,19 @@ func (linuxReporter) Show(components []string) error {
 				output.Warning("no VGA-compatible GPU found via lspci")
 			}
 		case "gpu-driver":
-			output.Header("gpu driver is")
+			output.Section("gpu driver")
 			result, err := run.Run("nvidia-smi")
 			if err != nil {
 				return fmt.Errorf("nvidia-smi failed: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		case "ram":
-			output.Header("ram is")
+			output.Section("ram")
 			result, err := run.RunSudo("lshw", "-C", "memory")
 			if err != nil {
 				return fmt.Errorf("failed to get RAM info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		default:
 			return fmt.Errorf("unknown component: %s (valid: mobo, cpu, gpu, gpu-driver, ram)", comp)
 		}
@@ -96,35 +96,35 @@ func (darwinReporter) Show(components []string) error {
 	for _, comp := range components {
 		switch comp {
 		case "mobo":
-			output.Header("hardware is")
+			output.Section("hardware")
 			result, err := run.Run("system_profiler", "SPHardwareDataType")
 			if err != nil {
 				return fmt.Errorf("failed to get hardware info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		case "cpu":
-			output.Header("cpu is")
+			output.Section("cpu")
 			result, err := run.Run("sysctl", "-n", "machdep.cpu.brand_string")
 			if err != nil {
 				return fmt.Errorf("failed to get CPU info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		case "gpu":
-			output.Header("gpu is")
+			output.Section("gpu")
 			result, err := run.Run("system_profiler", "SPDisplaysDataType")
 			if err != nil {
 				return fmt.Errorf("failed to get GPU info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		case "gpu-driver":
 			return fmt.Errorf("gpu-driver is only supported on Linux")
 		case "ram":
-			output.Header("ram is")
+			output.Section("ram")
 			result, err := run.Run("system_profiler", "SPMemoryDataType")
 			if err != nil {
 				return fmt.Errorf("failed to get RAM info: %w", err)
 			}
-			fmt.Println(result)
+			fmt.Println(strings.TrimRight(result, "\n"))
 		default:
 			return fmt.Errorf("unknown component: %s (valid: mobo, cpu, gpu, gpu-driver, ram)", comp)
 		}

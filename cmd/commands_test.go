@@ -82,6 +82,10 @@ func getAllCommands(cmd *cobra.Command, prefix string) []string {
 }
 
 func TestCommands(t *testing.T) {
+	// cobra adds "help" lazily on the first Execute; add it here so this test
+	// does not depend on another test having run a command first.
+	rootCmd.InitDefaultHelpCmd()
+
 	t.Run("When comparing actual commands to expected list, they match", func(t *testing.T) {
 		allCommands := getAllCommands(rootCmd, "")
 

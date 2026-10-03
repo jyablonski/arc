@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
-	"github.com/jyablonski/arc/internal/deps"
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -16,60 +16,49 @@ var validateCmd = &cobra.Command{
 Required tools are necessary for basic functionality, while optional tools
 enable additional features.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		output.Header("Validating arc dependencies")
-
-		output.Info(fmt.Sprintf("Platform: %s", app.Platform))
-
-		tools := append([]deps.ToolStatus(nil), app.Tools...)
-
-		// Check availability
-		for i := range tools {
-			tools[i].Available = run.CommandExists(tools[i].Name)
-		}
-
-		// Separate required and optional
-		required := []deps.ToolStatus{}
-		optional := []deps.ToolStatus{}
-		for _, tool := range tools {
-			if tool.Required {
-				required = append(required, tool)
-			} else {
-				optional = append(optional, tool)
+		style := output.StyleFor(os.Stdout)
+		sc := &output.Screen{W: os.Stdout, Style: style, Title: "arc validate", Meta: app.Platform.String()}
+		grid := output.Grid{Columns: []output.Column{
+			{Align: output.AlignCenter},
+			{Header: "tool"},
+			{Header: "kind"},
+			{Header: "description", Flex: true},
+		}}
+		// Required tools lead; a missing optional tool is informational only.
+		missingRequired, missingOptional := 0, 0
+		for _, required := range []bool{true, false} {
+			for _, tool := range app.Tools {
+				if tool.Required != required {
+					continue
+				}
+				kind, glyph := "optional", output.GlyphOK
+				if required {
+					kind = "required"
+				}
+				if !run.CommandExists(tool.Name) {
+					if required {
+						glyph = output.GlyphFail
+						missingRequired++
+					} else {
+						glyph = output.GlyphInfo
+						missingOptional++
+					}
+				}
+				grid.Rows = append(grid.Rows, []string{style.Glyph(glyph), tool.Name, kind, tool.Description})
 			}
 		}
+		sc.Grid(grid)
 
-		// Check required tools
-		output.Header("Required Tools")
-		allRequiredAvailable := true
-		for _, tool := range required {
-			if tool.Available {
-				output.Success(fmt.Sprintf("✓ %s - %s", tool.Name, tool.Description))
-			} else {
-				output.Error(fmt.Sprintf("✗ %s - %s (MISSING)", tool.Name, tool.Description))
-				allRequiredAvailable = false
-			}
-		}
-
-		// Check optional tools
-		output.Header("Optional Tools")
-		for _, tool := range optional {
-			if tool.Available {
-				output.Success(fmt.Sprintf("✓ %s - %s", tool.Name, tool.Description))
-			} else {
-				output.Info(fmt.Sprintf("○ %s - %s (not installed)", tool.Name, tool.Description))
-			}
-		}
-
-		// Summary
-		fmt.Println()
-		if allRequiredAvailable {
-			output.Success("All required tools are available!")
-			return nil
-		} else {
-			output.Error("Some required tools are missing!")
-			output.Info("Run 'arc setup' to install missing dependencies")
+		if missingRequired > 0 {
+			sc.Flush(style.Glyph(output.GlyphFail) + " " + output.Count(missingRequired, "required tool", "required tools") + " missing" + style.Sep() + style.Faint("arc setup"))
 			return arcerrs.ErrValidationFailed
 		}
+		summary := style.Glyph(output.GlyphOK) + " all required tools available"
+		if missingOptional > 0 {
+			summary += style.Sep() + fmt.Sprintf("%d optional not installed", missingOptional)
+		}
+		sc.Flush(summary)
+		return nil
 	},
 }
 

@@ -110,8 +110,8 @@ func TestCleanCmd_surfacesLogCleanupError(t *testing.T) {
 }
 
 func TestLogCleanupMessage(t *testing.T) {
-	require.Equal(t, "Removed 1 update log (1.5 KiB)", logCleanupMessage(sysupdate.LogCleanupResult{Files: 1, Bytes: 1536}))
-	require.Equal(t, "Removed 2 update logs (2.0 MiB)", logCleanupMessage(sysupdate.LogCleanupResult{Files: 2, Bytes: 2 * 1024 * 1024}))
+	require.Equal(t, "removed 1 update log (1.5 KiB)", logCleanupMessage(sysupdate.LogCleanupResult{Files: 1, Bytes: 1536}))
+	require.Equal(t, "removed 2 update logs (2.0 MiB)", logCleanupMessage(sysupdate.LogCleanupResult{Files: 2, Bytes: 2 * 1024 * 1024}))
 }
 
 func resetCleanFlags() {

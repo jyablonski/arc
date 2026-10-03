@@ -34,8 +34,34 @@ from each provider's skills directory back to it, validates frontmatter, and
 never clobbers real content in provider slots.`,
 }
 
-func newManager() *skills.Manager {
-	return skills.New(skills.Config{DryRun: skillsDryRun})
+func newManager(cmd *cobra.Command) *skills.Manager {
+	return skills.New(skills.Config{DryRun: skillsDryRun, Log: stepLog(cmd)})
+}
+
+// dryRunMeta is the title-line marker for a run that changes nothing.
+func dryRunMeta(dryRun bool) string {
+	if dryRun {
+		return "dry run"
+	}
+	return ""
+}
+
+// countPart is a summary fragment that is dropped when there is nothing to
+// count, so a clean run's closing line stays short.
+func countPart(n int, label string) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d %s", n, label)
+}
+
+// tense picks the wording for something a real run did and a dry run only
+// planned, so a dry run's closing line never claims a change.
+func tense(dryRun bool, done, planned string) string {
+	if dryRun {
+		return planned
+	}
+	return done
 }
 
 var skillsAddCmd = &cobra.Command{
@@ -47,17 +73,26 @@ var skillsAddCmd = &cobra.Command{
 Use --new <name> to scaffold from an embedded template instead of promoting a
 draft.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := newManager()
-		if skillsAddNew != "" {
-			if len(args) > 0 {
-				return fmt.Errorf("--new and [path] are mutually exclusive")
-			}
-			return m.AddNew(skillsAddNew)
+		m := newManager(cmd)
+		if skillsAddNew != "" && len(args) > 0 {
+			return fmt.Errorf("--new and [path] are mutually exclusive")
 		}
-		if len(args) != 1 {
+		if skillsAddNew == "" && len(args) != 1 {
 			return fmt.Errorf("exactly one path argument is required")
 		}
-		return m.Add(args[0], skillsAddForce)
+		output.Title("arc skills add", dryRunMeta(skillsDryRun))
+		if skillsAddNew != "" {
+			if err := m.AddNew(skillsAddNew); err != nil {
+				return err
+			}
+			output.Summary(output.GlyphOK, tense(skillsDryRun, "scaffolded ", "would scaffold ")+skillsAddNew)
+			return nil
+		}
+		if err := m.Add(args[0], skillsAddForce); err != nil {
+			return err
+		}
+		output.Summary(output.GlyphOK, tense(skillsDryRun, "skill added", "skill would be added"))
+		return nil
 	},
 }
 
@@ -71,17 +106,25 @@ are never touched.
 
 Exits with a non-zero status if any conflict is unresolved.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := newManager()
+		m := newManager(cmd)
+		output.Title("arc skills sync", dryRunMeta(skillsDryRun))
 		res, err := m.Sync()
 		if err != nil {
 			return err
 		}
-		output.Header("Sync summary")
-		output.Info(fmt.Sprintf("linked: %d, metadata updated: %d, pruned: %d, conflicts: %d",
-			res.Linked, res.MetadataUpdated, res.Pruned, res.Conflicts))
+		parts := []string{
+			countPart(res.Linked, tense(skillsDryRun, "linked", "to link")),
+			countPart(res.MetadataUpdated, tense(skillsDryRun, "metadata updated", "metadata to update")),
+			countPart(res.Pruned, tense(skillsDryRun, "pruned", "to prune")),
+		}
 		if res.Conflicts > 0 {
+			output.Summary(output.GlyphWarn, append(parts, output.Count(res.Conflicts, "conflict", "conflicts"))...)
 			return ErrSkillsConflict
 		}
+		if res.Linked+res.MetadataUpdated+res.Pruned == 0 {
+			parts = []string{"already in sync"}
+		}
+		output.Summary(output.GlyphOK, parts...)
 		return nil
 	},
 }
@@ -97,17 +140,21 @@ reported as conflicts and never overwritten.`,
 		if len(args) != 1 {
 			return fmt.Errorf("exactly one parent_folder argument is required")
 		}
-		m := newManager()
+		m := newManager(cmd)
+		output.Title("arc skills export", dryRunMeta(skillsDryRun))
 		res, err := m.Export(args[0])
 		if err != nil {
 			return err
 		}
-		output.Header("Export summary")
-		output.Info(fmt.Sprintf("exported: %d, deduped: %d, conflicts: %d",
-			res.Exported, res.Deduped, res.Conflicts))
+		parts := []string{
+			fmt.Sprintf("%d %s", res.Exported, tense(skillsDryRun, "exported", "to export")),
+			countPart(res.Deduped, tense(skillsDryRun, "deduped", "to dedupe")),
+		}
 		if res.Conflicts > 0 {
+			output.Summary(output.GlyphWarn, append(parts, output.Count(res.Conflicts, "conflict", "conflicts"))...)
 			return ErrSkillsConflict
 		}
+		output.Summary(output.GlyphOK, parts...)
 		return nil
 	},
 }
@@ -124,7 +171,7 @@ provider but not in ~/ai/skills are listed as unmanaged.
 Use --check for a single line and a non-zero exit when any link is out of
 sync (for shell prompts and cron).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := newManager()
+		m := newManager(cmd)
 		res, err := m.List()
 		if err != nil {
 			return err
@@ -159,22 +206,24 @@ a name argument is given.
 Use --fix to rename the canonical directory when it disagrees with
 frontmatter.name, then run arc skills sync to refresh symlinks.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := newManager()
+		m := newManager(cmd)
 		var name string
 		if len(args) == 1 {
 			name = args[0]
 		}
+		output.Title("arc skills validate", dryRunMeta(skillsDryRun))
 		issues, err := m.Validate(name, skillsValidateFix)
 		if err != nil {
 			return err
 		}
 		if len(issues) == 0 {
-			output.Success("all skills valid")
+			output.Summary(output.GlyphOK, "all skills valid")
 			return nil
 		}
 		for _, issue := range issues {
 			output.Error(fmt.Sprintf("%s: %s", issue.Skill, issue.Error))
 		}
+		output.Summary(output.GlyphFail, output.Count(len(issues), "validation issue", "validation issues"))
 		return fmt.Errorf("%d validation issue(s)", len(issues))
 	},
 }
@@ -186,8 +235,13 @@ var skillsRemoveCmd = &cobra.Command{
 		if len(args) != 1 {
 			return fmt.Errorf("exactly one skill name is required")
 		}
-		m := newManager()
-		return m.Remove(args[0])
+		m := newManager(cmd)
+		output.Title("arc skills remove", dryRunMeta(skillsDryRun))
+		if err := m.Remove(args[0]); err != nil {
+			return err
+		}
+		output.Summary(output.GlyphOK, tense(skillsDryRun, "removed ", "would remove ")+args[0])
+		return nil
 	},
 }
 
@@ -199,12 +253,17 @@ exist.
 
 Never touches canonical trees or real files.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := newManager()
+		m := newManager(cmd)
+		output.Title("arc skills prune", dryRunMeta(skillsDryRun))
 		n, err := m.Prune()
 		if err != nil {
 			return err
 		}
-		output.Info(fmt.Sprintf("pruned %d dangling symlink(s)", n))
+		if n == 0 {
+			output.Summary(output.GlyphInfo, "no dangling symlinks")
+			return nil
+		}
+		output.Summary(output.GlyphOK, output.Count(n, "dangling symlink", "dangling symlinks")+tense(skillsDryRun, " pruned", " to prune"))
 		return nil
 	},
 }

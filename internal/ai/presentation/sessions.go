@@ -31,6 +31,7 @@ func PrintSessions(w io.Writer, report ai.SessionReport, opts SessionsPrintOptio
 	sc := &output.Screen{W: w, Style: style, Title: "arc ai sessions", Meta: meta}
 
 	var total int64
+	var cost float64
 	grid := output.Grid{Columns: []output.Column{
 		{Header: "age"},
 		{Header: "session"},
@@ -38,11 +39,13 @@ func PrintSessions(w io.Writer, report ai.SessionReport, opts SessionsPrintOptio
 		{Header: "model"},
 		{Header: "msgs", Align: output.AlignRight},
 		{Header: "tokens", Align: output.AlignRight},
+		{Header: "api equiv", Align: output.AlignRight},
 		{Header: "project"},
 		{Header: "title", Flex: true},
 	}}
 	for _, s := range report.Sessions {
 		total += s.Tokens.Total()
+		cost += s.CostUSD
 		grid.Rows = append(grid.Rows, []string{
 			orDash(style, relativeAge(s.LastAt, opts.Now)),
 			style.Cyan(shortSessionID(s.SessionID)),
@@ -50,6 +53,7 @@ func PrintSessions(w io.Writer, report ai.SessionReport, opts SessionsPrintOptio
 			orDash(style, shortModel(s.Provider, s.Model)),
 			fmt.Sprintf("%d", s.Messages),
 			humanizeCount(s.Tokens.Total()),
+			costCell(style, s.CostUSD),
 			orDash(style, projectLabel(s.Project)),
 			orDash(style, strings.TrimSpace(s.Title)),
 		})
@@ -79,10 +83,10 @@ func PrintSessions(w io.Writer, report ai.SessionReport, opts SessionsPrintOptio
 		}
 	}
 
-	sc.Flush(sessionsFooter(style, report, total))
+	sc.Flush(sessionsFooter(style, report, total, cost))
 }
 
-func sessionsFooter(style output.Style, report ai.SessionReport, total int64) string {
+func sessionsFooter(style output.Style, report ai.SessionReport, total int64, cost float64) string {
 	shown := len(report.Sessions)
 	if shown == 0 && report.HiddenAutomated == 0 {
 		return style.Glyph(output.GlyphInfo) + " no local sessions found"
@@ -99,12 +103,23 @@ func sessionsFooter(style output.Style, report ai.SessionReport, total int64) st
 	if total > 0 {
 		parts = append(parts, humanizeCount(total)+" tokens")
 	}
+	if cost > 0 {
+		parts = append(parts, formatCurrency(cost, true, false)+" api equiv")
+	}
 	return style.Faint(strings.Join(parts, style.Sep()))
 }
 
 // shortModel drops the provider prefix the provider column already states.
 func shortModel(provider, model string) string {
 	return strings.TrimPrefix(model, provider+"-")
+}
+
+// costCell marks an unpriced (or free) session rather than printing $0.00.
+func costCell(style output.Style, usd float64) string {
+	if usd <= 0 {
+		return style.Dash()
+	}
+	return formatCurrency(usd, true, false)
 }
 
 func orDash(style output.Style, v string) string {

@@ -23,6 +23,20 @@ repos:
       - id: yamlfmt
         args: ["-formatter", "retain_line_breaks=true"]
 
+  # Paths, commands and tools named in AGENTS.md must exist. Runs on every
+  # commit, not only when AGENTS.md changes: renaming or deleting a file it
+  # references breaks it just the same.
+  - repo: local
+    hooks:
+      - id: agentslint
+        name: agentslint
+        language: python
+        additional_dependencies:
+          - agentslint==0.1.0
+        entry: agentslint check
+        pass_filenames: false
+        always_run: true
+
   # Go formatting
   - repo: https://github.com/tekwizely/pre-commit-golang
     rev: v1.0.0-rc.4

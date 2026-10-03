@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/jyablonski/arc/internal/output"
 	"github.com/jyablonski/arc/internal/sysupdate"
@@ -41,28 +43,26 @@ func (m linuxManager) Clean(opts CleanOptions) error {
 	}
 
 	if !opts.OrphansOnly {
-		output.Header("cleaning package cache")
 		if _, err := run.RunSudo("pacman", "-Sc", "--noconfirm"); err != nil {
 			return fmt.Errorf("failed to clean cache: %w", err)
 		}
-		output.Success("Package cache cleaned")
+		output.Success("package cache cleaned")
 	}
 
 	if !opts.CacheOnly {
-		output.Header("removing orphaned packages")
 		orphans, err := m.pac.GetOrphanedPackages()
 		if err != nil {
 			return fmt.Errorf("failed to get orphaned packages: %w", err)
 		}
 
 		if len(orphans) == 0 {
-			output.Info("No orphans to remove")
+			output.Info("no orphaned packages to remove")
 		} else {
 			args := append([]string{"pacman", "-Rns", "--noconfirm"}, orphans...)
 			if _, err := run.RunSudo(args[0], args[1:]...); err != nil {
-				output.Warning(fmt.Sprintf("Failed to remove some orphans: %v", err))
+				output.Warning(fmt.Sprintf("some orphaned packages not removed: %v", err))
 			} else {
-				output.Success(fmt.Sprintf("Removed %d orphaned packages", len(orphans)))
+				output.Success(fmt.Sprintf("removed %s", output.Count(len(orphans), "orphaned package", "orphaned packages")))
 			}
 		}
 	}
@@ -166,32 +166,44 @@ func (m linuxManager) Packages(opts PackageOptions) error {
 		return encoder.Encode(stats)
 	}
 
-	output.Header("=== Package Count ===")
-	fmt.Printf("%d\n\n", stats.TotalPackages)
-	output.Header("=== Explicitly Installed ===")
-	fmt.Printf("%d\n\n", stats.ExplicitlyInstalled)
-	output.Header("=== Foreign/AUR Packages ===")
-	fmt.Printf("%d\n\n", stats.ForeignPackages)
-	output.Header("=== Total Installed Size ===")
-	fmt.Printf("%.2f GiB\n\n", stats.TotalInstalledSize)
-	output.Header("=== Package Cache Size ===")
-	fmt.Printf("%s\n\n", stats.CacheSize)
-	output.Header("=== Orphaned Packages ===")
-	if len(stats.OrphanedPackages) == 0 {
-		fmt.Println("None")
-	} else {
+	style := output.StyleFor(os.Stdout)
+	sc := &output.Screen{W: os.Stdout, Style: style, Title: "arc packages", Meta: output.Timestamp(time.Now())}
+	sc.Grid(output.Grid{
+		NoHeader: true,
+		Columns:  []output.Column{{}, {Flex: true}},
+		Rows: [][]string{
+			{style.Faint("installed"), fmt.Sprintf("%d", stats.TotalPackages)},
+			{style.Faint("explicit"), fmt.Sprintf("%d", stats.ExplicitlyInstalled)},
+			{style.Faint("foreign / aur"), fmt.Sprintf("%d", stats.ForeignPackages)},
+			{style.Faint(fmt.Sprintf("installed in %dd", opts.Days)), fmt.Sprintf("%d", stats.RecentlyInstalled)},
+			{style.Faint("installed size"), fmt.Sprintf("%.2f GiB", stats.TotalInstalledSize)},
+			{style.Faint("cache size"), stats.CacheSize},
+			{style.Faint("orphaned"), fmt.Sprintf("%d", len(stats.OrphanedPackages))},
+		},
+	})
+	if len(stats.OrphanedPackages) > 0 {
+		sc.Blank()
+		sc.Line(style.Faint("orphaned"))
 		for _, pkg := range stats.OrphanedPackages {
-			fmt.Println(pkg)
+			sc.Line(pkg)
 		}
 	}
-	fmt.Println()
-	output.Header(fmt.Sprintf("=== Recently Installed (%d days) ===", opts.Days))
-	fmt.Printf("%d\n\n", stats.RecentlyInstalled)
-	output.Header(fmt.Sprintf("=== Top %d Largest Packages ===", opts.Top))
-	rows := make([][]string, len(largest))
-	for i, pkg := range largest {
-		rows[i] = []string{fmt.Sprintf("%s %s", pkg.Size, pkg.Unit), pkg.Name}
+	if len(largest) > 0 {
+		grid := output.Grid{Columns: []output.Column{
+			{Header: "size", Align: output.AlignRight},
+			{Header: "package"},
+		}}
+		for _, pkg := range largest {
+			grid.Rows = append(grid.Rows, []string{fmt.Sprintf("%s %s", pkg.Size, pkg.Unit), pkg.Name})
+		}
+		sc.Blank()
+		sc.Line(style.Faint(fmt.Sprintf("largest %d", len(largest))))
+		sc.Grid(grid)
 	}
-	output.Table([]string{"Size", "Package"}, rows)
+	sc.Flush(style.Faint(strings.Join([]string{
+		output.Count(stats.TotalPackages, "package", "packages"),
+		fmt.Sprintf("%.2f GiB installed", stats.TotalInstalledSize),
+		output.Count(len(stats.OrphanedPackages), "orphan", "orphans"),
+	}, style.Sep())))
 	return nil
 }

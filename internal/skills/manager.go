@@ -69,6 +69,9 @@ type Config struct {
 	Providers []Provider
 	FS        *FS
 	DryRun    bool
+	// Log receives the step lines a run reports as it works. Nil means the
+	// stdout stream; a caller whose stdout carries JSON passes stderr.
+	Log *output.Stream
 }
 
 type Manager struct {
@@ -76,6 +79,7 @@ type Manager struct {
 	providers []Provider
 	fs        *FS
 	dryRun    bool
+	log       *output.Stream
 }
 
 func New(c Config) *Manager {
@@ -88,20 +92,30 @@ func New(c Config) *Manager {
 	if c.FS == nil {
 		c.FS = DefaultFS()
 	}
+	if c.Log == nil {
+		c.Log = output.Live()
+	}
 	return &Manager{
 		paths:     c.Paths,
 		providers: c.Providers,
 		fs:        c.FS,
 		dryRun:    c.DryRun,
+		log:       c.Log,
 	}
 }
 
 func (m *Manager) announce(format string, args ...any) {
+	// Paths read as ~/… like every other screen.
+	for i, arg := range args {
+		if s, ok := arg.(string); ok {
+			args[i] = output.TildePath(s)
+		}
+	}
 	msg := fmt.Sprintf(format, args...)
 	if m.dryRun {
-		output.Info("would " + msg)
+		m.log.Info("would " + msg)
 	} else {
-		output.Info(msg)
+		m.log.Info(msg)
 	}
 }
 
@@ -218,7 +232,7 @@ func (m *Manager) linkAllProviders(name string) error {
 	canonical := filepath.Join(m.paths.SkillsRoot, name)
 	for _, p := range m.providers {
 		if err := m.linkOne(p, name, canonical); err != nil {
-			output.Warning(fmt.Sprintf("%s: %v", p.Name, err))
+			m.log.Warning(fmt.Sprintf("%s: %v", p.Name, err))
 		}
 	}
 	return nil
@@ -256,7 +270,6 @@ func (m *Manager) reconcileExistingSlot(p Provider, slot string, info os.FileInf
 		canonicalAbs, _ := filepath.Abs(canonical)
 		targetAbs, _ := filepath.Abs(resolvedTarget)
 		if targetAbs == canonicalAbs {
-			output.Info(fmt.Sprintf("ok: %s -> %s", slot, canonical))
 			return nil
 		}
 		if _, sterr := os.Stat(resolvedTarget); os.IsNotExist(sterr) {
@@ -269,10 +282,10 @@ func (m *Manager) reconcileExistingSlot(p Provider, slot string, info os.FileInf
 			}
 			return m.fs.Symlink(canonical, slot)
 		}
-		output.Info(fmt.Sprintf("skip (external symlink): %s -> %s", slot, target))
+		m.log.Info(fmt.Sprintf("skip (external symlink): %s -> %s", slot, target))
 		return nil
 	}
-	output.Warning(fmt.Sprintf("conflict (real %s in slot): %s (manual review)", fileKind(info), slot))
+	m.log.Warning(fmt.Sprintf("conflict (real %s in slot): %s (manual review)", fileKind(info), slot))
 	return nil
 }
 
@@ -311,10 +324,10 @@ func (m *Manager) Sync() (SyncResult, error) {
 		canonical := filepath.Join(m.paths.SkillsRoot, name)
 		fm, parseErr := Parse(filepath.Join(canonical, SkillFilename))
 		if parseErr != nil {
-			output.Warning(fmt.Sprintf("Codex metadata conflict for %s: %v", name, parseErr))
+			m.log.Warning(fmt.Sprintf("Codex metadata conflict for %s: %v", name, parseErr))
 			res.Conflicts++
 		} else if updated, metadataErr := m.syncOpenAIMetadata(canonical, fm); metadataErr != nil {
-			output.Warning(fmt.Sprintf("Codex metadata conflict for %s: %v", name, metadataErr))
+			m.log.Warning(fmt.Sprintf("Codex metadata conflict for %s: %v", name, metadataErr))
 			res.Conflicts++
 		} else if updated {
 			res.MetadataUpdated++
@@ -324,17 +337,17 @@ func (m *Manager) Sync() (SyncResult, error) {
 			info, lerr := os.Lstat(slot)
 			if lerr != nil {
 				if !os.IsNotExist(lerr) {
-					output.Warning(fmt.Sprintf("lstat %s: %v", slot, lerr))
+					m.log.Warning(fmt.Sprintf("lstat %s: %v", slot, lerr))
 					continue
 				}
 				if err := m.mkdirAll(p.SkillsDir, filemode.Dir); err != nil {
-					output.Warning(fmt.Sprintf("mkdir %s: %v", p.SkillsDir, err))
+					m.log.Warning(fmt.Sprintf("mkdir %s: %v", p.SkillsDir, err))
 					continue
 				}
 				m.announce("create symlink %s -> %s", slot, canonical)
 				if !m.dryRun {
 					if err := m.fs.Symlink(canonical, slot); err != nil {
-						output.Warning(fmt.Sprintf("symlink %s: %v", slot, err))
+						m.log.Warning(fmt.Sprintf("symlink %s: %v", slot, err))
 						continue
 					}
 				}
@@ -342,7 +355,7 @@ func (m *Manager) Sync() (SyncResult, error) {
 				continue
 			}
 			if err := m.reconcileExistingSlot(p, slot, info, canonical); err != nil {
-				output.Warning(fmt.Sprintf("%s: %v", slot, err))
+				m.log.Warning(fmt.Sprintf("%s: %v", slot, err))
 			}
 			if info.Mode()&os.ModeSymlink == 0 {
 				res.Conflicts++
@@ -381,7 +394,7 @@ func (m *Manager) Export(parentFolder string) (ExportResult, error) {
 			}
 			for _, name := range names {
 				if err := m.exportOne(name, parentFolder, &res); err != nil {
-					output.Warning(fmt.Sprintf("export %s: %v", name, err))
+					m.log.Warning(fmt.Sprintf("export %s: %v", name, err))
 				}
 			}
 			return res, nil
@@ -397,7 +410,7 @@ func (m *Manager) Export(parentFolder string) (ExportResult, error) {
 	}
 	for _, name := range names {
 		if err := m.exportOne(name, parentFolder, &res); err != nil {
-			output.Warning(fmt.Sprintf("export %s: %v", name, err))
+			m.log.Warning(fmt.Sprintf("export %s: %v", name, err))
 		}
 	}
 	return res, nil
@@ -421,11 +434,11 @@ func (m *Manager) exportOne(name, parentFolder string, res *ExportResult) error 
 		return err
 	}
 	if same {
-		output.Info(fmt.Sprintf("dedupe %s (byte-identical to canonical)", dest))
+		m.log.Info(fmt.Sprintf("dedupe %s (byte-identical to canonical)", dest))
 		res.Deduped++
 		return nil
 	}
-	output.Warning(fmt.Sprintf("conflict: %s differs from canonical; leaving %s unchanged", name, dest))
+	m.log.Warning(fmt.Sprintf("conflict: %s differs from canonical; leaving %s unchanged", name, dest))
 	res.Conflicts++
 	return nil
 }
@@ -452,7 +465,7 @@ func (m *Manager) pruneProviders() (int, error) {
 			m.announce("prune dangling symlink %s", slot)
 			if !m.dryRun {
 				if err := m.fs.Remove(slot); err != nil {
-					output.Warning(fmt.Sprintf("prune %s: %v", slot, err))
+					m.log.Warning(fmt.Sprintf("prune %s: %v", slot, err))
 					continue
 				}
 			}
@@ -618,7 +631,7 @@ func (m *Manager) Validate(name string, fix bool) ([]ValidationIssue, error) {
 					})
 					continue
 				}
-				output.Info("run `arc skills sync` to refresh provider symlinks")
+				m.log.Info("run `arc skills sync` to refresh provider symlinks")
 			}
 			continue
 		}
@@ -649,7 +662,7 @@ func (m *Manager) Remove(name string) error {
 			}
 		}
 	case os.IsNotExist(err):
-		output.Info(fmt.Sprintf("canonical %s already missing; sweeping providers", canonical))
+		m.log.Info(fmt.Sprintf("canonical %s already missing; sweeping providers", canonical))
 	default:
 		return fmt.Errorf("stat %s: %w", canonical, err)
 	}
@@ -661,13 +674,13 @@ func (m *Manager) Remove(name string) error {
 			continue
 		}
 		if sInfo.Mode()&os.ModeSymlink == 0 {
-			output.Warning(fmt.Sprintf("conflict: %s is a real %s; manual review", slot, fileKind(sInfo)))
+			m.log.Warning(fmt.Sprintf("conflict: %s is a real %s; manual review", slot, fileKind(sInfo)))
 			continue
 		}
 		m.announce("unlink %s (%s)", slot, p.Name)
 		if !m.dryRun {
 			if err := m.fs.Remove(slot); err != nil {
-				output.Warning(fmt.Sprintf("unlink %s: %v", slot, err))
+				m.log.Warning(fmt.Sprintf("unlink %s: %v", slot, err))
 			}
 		}
 	}

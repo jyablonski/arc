@@ -3,12 +3,16 @@ package gitcleanup
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/jyablonski/arc/internal/shell"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFilterMergedBranches(t *testing.T) {
@@ -190,4 +194,47 @@ func TestRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRun_reportsOnlyBranchesActuallyRemoved(t *testing.T) {
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	setRunner(t, &boundary.ShellRunnerMock{
+		CommandExistsFunc: func(string) bool { return true },
+		RunFunc: func(name string, args ...string) (string, error) {
+			switch {
+			case args[0] == "rev-parse" && args[1] == "--abbrev-ref":
+				return "main\n", nil
+			case args[0] == "branch" && args[1] == "--merged":
+				return "* main\n  feature-done\n  stuck-branch", nil
+			case args[0] == "branch" && args[1] == "-d" && args[2] == "stuck-branch":
+				return "", fmt.Errorf("not fully merged")
+			}
+			return "", nil
+		},
+	})
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	runErr := Run()
+	require.NoError(t, w.Close())
+	os.Stdout = old
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, runErr)
+
+	lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	require.True(t, strings.HasPrefix(lines[0], "arc git cleanup"))
+	require.True(t, strings.HasSuffix(lines[0], "main"), "the current branch is the title meta")
+	require.Equal(t, []string{
+		"",
+		"✓ removed feature-done",
+		"⚠ stuck-branch not removed: not fully merged",
+		"✓ pruned remote references",
+		"",
+		// A failed delete is not counted as removed, and downgrades the verdict.
+		"⚠ 1 merged branch removed · remotes pruned",
+	}, lines[2:])
 }

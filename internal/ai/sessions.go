@@ -23,8 +23,14 @@ type SessionSummary struct {
 	Model     string         `json:"model,omitempty"`
 	Messages  int            `json:"messages"`
 	Tokens    TokenBreakdown `json:"tokens"`
-	StartedAt time.Time      `json:"started_at"`
-	LastAt    time.Time      `json:"last_at"`
+	// CostUSD is the API-equivalent estimate for Tokens, the same pricing
+	// "arc ai tokens" uses. Zero when no pricer ran or the model is unpriced.
+	CostUSD   float64   `json:"cost_usd"`
+	StartedAt time.Time `json:"started_at"`
+	LastAt    time.Time `json:"last_at"`
+	// ModelTokens splits Tokens by model so a session that switched models is
+	// priced at each model's own rate rather than the last model's.
+	ModelTokens map[string]TokenBreakdown `json:"-"`
 }
 
 //go:generate go tool moq -rm -out sessionprovider_moq.go . SessionProvider
@@ -53,6 +59,8 @@ type SessionOptions struct {
 	// IncludeAutomated keeps machine-generated sessions (e.g. Codex
 	// auto-review) that are otherwise hidden and only counted.
 	IncludeAutomated bool
+	// Pricer fills each listed session's CostUSD; nil leaves costs at zero.
+	Pricer Pricer
 }
 
 // automatedModels are session models that only ever run as a side effect of
@@ -133,8 +141,32 @@ func RunSessionProviders(ctx context.Context, providers []SessionProvider, filte
 	if opts.Limit > 0 && len(filtered) > opts.Limit {
 		filtered = filtered[:opts.Limit]
 	}
+	if opts.Pricer != nil {
+		for i := range filtered {
+			filtered[i].CostUSD = sessionCost(opts.Pricer, filtered[i])
+		}
+	}
 	report.Sessions = filtered
 	return report
+}
+
+func sessionCost(pricer Pricer, s SessionSummary) float64 {
+	if len(s.ModelTokens) == 0 {
+		cost, _ := pricer.Cost(s.Model, s.Tokens)
+		return cost
+	}
+	// Sum in a fixed order so the float result (and JSON) is reproducible.
+	models := make([]string, 0, len(s.ModelTokens))
+	for model := range s.ModelTokens {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	var total float64
+	for _, model := range models {
+		cost, _ := pricer.Cost(model, s.ModelTokens[model])
+		total += cost
+	}
+	return total
 }
 
 // FoldSessions collapses token records into per-session accumulators keyed by
@@ -152,7 +184,12 @@ func FoldSessions(records []TokenRecord) map[string]*SessionSummary {
 		}
 		s.Tokens = s.Tokens.Add(r.Tokens)
 		s.Messages++
-		if model := strings.TrimSpace(r.Model); model != "" && (s.Model == "" || !r.Timestamp.Before(s.LastAt)) {
+		model := strings.TrimSpace(r.Model)
+		if s.ModelTokens == nil {
+			s.ModelTokens = map[string]TokenBreakdown{}
+		}
+		s.ModelTokens[model] = s.ModelTokens[model].Add(r.Tokens)
+		if model != "" && (s.Model == "" || !r.Timestamp.Before(s.LastAt)) {
 			s.Model = model
 		}
 		if r.Timestamp.IsZero() {

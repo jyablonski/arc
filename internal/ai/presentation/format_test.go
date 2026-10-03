@@ -1,8 +1,10 @@
 package presentation
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/stretchr/testify/require"
@@ -160,4 +162,40 @@ func trimmedCells(values []string) []string {
 		out[i] = strings.TrimSpace(v)
 	}
 	return out
+}
+
+func TestPrintHistory_screenWithTotalRowAndFooter(t *testing.T) {
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	now := time.Date(2026, 10, 3, 9, 55, 26, 0, time.UTC)
+	report := ai.HistoryReport{
+		FetchedAt: now,
+		GroupBy:   "provider,model",
+		Providers: []ai.HistoryProviderResult{{Name: "claude", OK: true}, {Name: "codex", Error: "no logs", Hint: "install codex"}},
+		Groups: []ai.UsageGroup{
+			{Provider: "claude", Model: "claude-opus-5-5", Tokens: ai.TokenBreakdown{Input: 934, CacheRead: 116_600_000, CacheWrite: 1_200_000, Output: 447_200}, CostUSD: 38.18},
+			{Provider: "claude", Model: "claude-haiku-4-5", Tokens: ai.TokenBreakdown{Input: 1_300_000, CacheRead: 43_600_000, Output: 316_300}, CostUSD: 0.84},
+		},
+		Total: ai.UsageGroup{Tokens: ai.TokenBreakdown{Input: 1_300_934, CacheRead: 160_200_000, CacheWrite: 1_200_000, Output: 763_500}, CostUSD: 39.02},
+	}
+	var buf bytes.Buffer
+	PrintHistory(&buf, report, HistoryPrintOptions{Now: now})
+	lines := strings.Split(buf.String(), "\n")
+
+	require.True(t, strings.HasPrefix(lines[0], "arc ai tokens"))
+	require.True(t, strings.HasSuffix(lines[0], "2026-10-03 09:55:26"))
+	// Numeric headers sit over right-aligned cells; empty cells are marked.
+	require.Equal(t, "group                    input  cache read  cache write  output   share  api equiv", lines[3])
+	require.Equal(t, "claude/claude-opus-5-5     934      116.6M         1.2M  447.2K   97.8%     $38.18", lines[4])
+	require.Equal(t, "claude/claude-haiku-4-5   1.3M       43.6M            —  316.3K    2.2%      $0.84", lines[5])
+	require.Equal(t, "total                     1.3M      160.2M         1.2M  763.5K  100.0%     $39.02", lines[6])
+	require.Contains(t, buf.String(), "✗ codex  no logs  install codex")
+	require.Contains(t, buf.String(), "2 groups · 163.5M tokens · $39.02 api equiv")
+}
+
+func TestPrintHistory_empty(t *testing.T) {
+	var buf bytes.Buffer
+	PrintHistory(&buf, ai.HistoryReport{}, HistoryPrintOptions{})
+	require.Contains(t, buf.String(), "arc ai tokens")
+	require.Contains(t, buf.String(), "no local token usage records found")
 }

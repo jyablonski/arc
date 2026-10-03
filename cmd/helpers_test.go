@@ -8,6 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// resetJSONFlag clears the global -j flag now and when the test ends. The flag
+// lives on the shared rootCmd, so a test that passes -j would otherwise leave
+// it set for whichever test runs next.
+func resetJSONFlag(t *testing.T) {
+	t.Helper()
+	reset := func() { require.NoError(t, rootCmd.PersistentFlags().Set("json", "false")) }
+	reset()
+	t.Cleanup(reset)
+}
+
 // captureStdout runs fn and returns everything it wrote to os.Stdout.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()

@@ -155,53 +155,124 @@ var statusHint = map[Status]string{
 	StatusUnsupported: "restrict it with --restrict-to",
 }
 
-// PrintSyncHuman summarizes one sync run per provider.
-func PrintSyncHuman(w io.Writer, res SyncResult) {
-	headers := []string{"provider", "written", "removed", "conflicts", "unsupported", "path"}
-	rows := make([][]string, 0, len(res.Providers))
+// PrintSyncHuman renders one sync run per provider onto the stream the
+// command titled and the manager reported its steps to, and closes it with a
+// verdict line. A dry run reports what it would have changed.
+func PrintSyncHuman(st *output.Stream, res SyncResult, dryRun bool) {
+	style := st.Style()
+	st.Gap()
+	grid := output.Grid{Columns: []output.Column{
+		{Header: "provider"},
+		{Header: "written", Align: output.AlignRight},
+		{Header: "removed", Align: output.AlignRight},
+		{Header: "conflicts", Align: output.AlignRight},
+		{Header: "unsupported", Align: output.AlignRight},
+		{Header: "path", Flex: true},
+	}}
+	if dryRun {
+		grid.Columns[1].Header, grid.Columns[2].Header = "to write", "to remove"
+	}
+	written, removed := 0, 0
 	for _, p := range res.Providers {
-		status := p.Path
-		if p.Error != "" {
-			status = "error: " + p.Error
-		}
-		rows = append(rows, []string{
+		written += p.Written
+		removed += p.Removed
+		grid.Rows = append(grid.Rows, []string{
 			p.Provider,
 			fmt.Sprintf("%d", p.Written),
 			fmt.Sprintf("%d", p.Removed),
 			fmt.Sprintf("%d", len(p.Conflicts)),
 			fmt.Sprintf("%d", len(p.Unsupported)),
-			status,
+			output.TildePath(p.Path),
 		})
 	}
-	output.FprintTable(w, headers, rows)
+	for _, line := range grid.Lines(style, style.Width) {
+		st.Line(line)
+	}
 
+	// Problems go under the grid as whole lines: a provider's error must not
+	// be truncated to fit a column.
+	type note struct {
+		glyph output.Glyph
+		text  string
+	}
+	var notes []note
 	for _, p := range res.Providers {
+		if p.Error != "" {
+			notes = append(notes, note{output.GlyphFail, fmt.Sprintf("%s: %s", p.Provider, p.Error)})
+		}
 		for _, name := range p.Conflicts {
-			output.Warning(fmt.Sprintf("%s/%s: configured by hand and differs; left unchanged (use --force to overwrite)", p.Provider, name))
+			notes = append(notes, note{output.GlyphWarn, fmt.Sprintf("%s/%s: configured by hand and differs; left unchanged", p.Provider, name)})
 		}
 		for _, name := range sortedKeys(p.Unsupported) {
-			output.Warning(fmt.Sprintf("%s/%s: skipped, %s", p.Provider, name, p.Unsupported[name]))
+			notes = append(notes, note{output.GlyphWarn, fmt.Sprintf("%s/%s: skipped, %s", p.Provider, name, p.Unsupported[name])})
 		}
+	}
+	if len(notes) > 0 {
+		st.Gap()
+		for _, n := range notes {
+			st.Step(n.glyph, n.text)
+		}
+	}
+
+	wrote, gone := "written", "removed"
+	if dryRun {
+		wrote, gone = "to write", "to remove"
+	}
+	var changed []string
+	if written > 0 {
+		changed = append(changed, fmt.Sprintf("%d %s", written, wrote))
+	}
+	if removed > 0 {
+		changed = append(changed, fmt.Sprintf("%d %s", removed, gone))
+	}
+	switch {
+	case res.Failures() > 0:
+		st.Summary(output.GlyphFail, append([]string{output.Count(res.Failures(), "provider", "providers") + " failed"}, changed...)...)
+	case res.Conflicts() > 0:
+		parts := append([]string{output.Count(res.Conflicts(), "conflict", "conflicts")}, changed...)
+		st.Summary(output.GlyphWarn, append(parts, style.Faint("arc mcp sync --force"))...)
+	case len(changed) == 0:
+		st.Summary(output.GlyphOK, "already in sync")
+	default:
+		st.Summary(output.GlyphOK, changed...)
 	}
 }
 
-// PrintImportHuman summarizes what import pulled into canonical.
-func PrintImportHuman(w io.Writer, res ImportResult) {
-	_, _ = fmt.Fprintf(w, "canonical: %s\n", res.CanonicalFile)
+// PrintImportHuman closes an import run: the manager has already announced
+// each entry it took, so this adds the ones it would not take and the verdict.
+func PrintImportHuman(st *output.Stream, res ImportResult, dryRun bool) {
+	canonical := output.TildePath(res.CanonicalFile)
 	if len(res.Added) == 0 && len(res.Conflicts) == 0 && len(res.Rejected) == 0 {
-		_, _ = fmt.Fprintln(w, "nothing new to import")
+		st.Step(output.GlyphInfo, "nothing new to import into "+canonical)
 		return
 	}
-	for _, s := range res.Added {
-		output.Success(fmt.Sprintf("imported %s from %s", s.Name, s.Provider))
-	}
 	for _, s := range res.Conflicts {
-		output.Warning(fmt.Sprintf("%s (%s): %s", s.Name, s.Provider, s.Reason))
+		st.Step(output.GlyphWarn, fmt.Sprintf("%s (%s): %s", s.Name, s.Provider, s.Reason))
 	}
 	for _, s := range res.Rejected {
-		output.Error(fmt.Sprintf("%s (%s): %s", s.Name, s.Provider, s.Reason))
+		st.Step(output.GlyphFail, fmt.Sprintf("%s (%s): %s", s.Name, s.Provider, s.Reason))
 	}
-	if len(res.Added) > 0 {
-		output.Info("run 'arc mcp sync' to push them to every provider")
+
+	glyph := output.GlyphOK
+	switch {
+	case len(res.Rejected) > 0:
+		glyph = output.GlyphFail
+	case len(res.Conflicts) > 0:
+		glyph = output.GlyphWarn
 	}
+	imported := fmt.Sprintf("%d imported into %s", len(res.Added), canonical)
+	if dryRun {
+		imported = fmt.Sprintf("%d would be imported into %s", len(res.Added), canonical)
+	}
+	parts := []string{imported}
+	if n := len(res.Conflicts); n > 0 {
+		parts = append(parts, output.Count(n, "conflict", "conflicts"))
+	}
+	if n := len(res.Rejected); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d rejected", n))
+	}
+	if len(res.Added) > 0 && !dryRun {
+		parts = append(parts, st.Style().Faint("arc mcp sync"))
+	}
+	st.Summary(glyph, parts...)
 }

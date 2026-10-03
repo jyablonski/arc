@@ -2,6 +2,9 @@ package presentation
 
 import (
 	"fmt"
+	"io"
+	"strings"
+	"time"
 
 	"github.com/jyablonski/arc/internal/ai"
 	"github.com/jyablonski/arc/internal/output"
@@ -9,17 +12,69 @@ import (
 
 type HistoryPrintOptions struct {
 	ShowTotalTokens bool
+	Now             time.Time
 }
 
-func PrintHistory(report ai.HistoryReport, opts HistoryPrintOptions) {
-	output.SectionAccent("AI token history", providerAccent("codex"))
-	if len(report.Groups) == 0 {
-		output.Info("no local token usage records found")
-		return
+// PrintHistory renders the token history as one grid with a total row, and
+// closes with what the listed usage would cost at API rates.
+func PrintHistory(w io.Writer, report ai.HistoryReport, opts HistoryPrintOptions) {
+	if opts.Now.IsZero() {
+		opts.Now = time.Now()
+	}
+	style := output.StyleFor(w)
+	meta := output.Timestamp(report.FetchedAt)
+	if report.FetchedAt.IsZero() {
+		meta = output.Timestamp(opts.Now)
+	}
+	sc := &output.Screen{W: w, Style: style, Title: "arc ai tokens", Meta: meta}
+
+	if len(report.Groups) > 0 {
+		headers, rows := historyRows(report, opts)
+		grid := output.Grid{Columns: make([]output.Column, len(headers)), Rows: rows}
+		for i, h := range headers {
+			grid.Columns[i] = output.Column{Header: h}
+			switch h {
+			case "group", "provider", "session", "model":
+			default:
+				grid.Columns[i].Align = output.AlignRight
+			}
+		}
+		for _, row := range rows {
+			for i, cell := range row {
+				if strings.TrimSpace(cell) == dash {
+					row[i] = strings.Replace(cell, dash, style.Dash(), 1)
+				}
+			}
+		}
+		sc.Grid(grid)
 	}
 
-	headers, rows := historyRows(report, opts)
-	output.Table(headers, rows)
+	var notes []output.Note
+	for _, p := range report.Providers {
+		if !p.OK {
+			notes = append(notes, output.Note{Glyph: output.GlyphFail, Label: p.Name, Detail: p.Error, Hint: p.Hint})
+		}
+	}
+	if len(notes) > 0 {
+		if len(report.Groups) > 0 {
+			sc.Blank()
+		}
+		sc.Notes(notes)
+	}
+
+	sc.Flush(historyFooter(style, report))
+}
+
+func historyFooter(style output.Style, report ai.HistoryReport) string {
+	if len(report.Groups) == 0 {
+		return style.Glyph(output.GlyphInfo) + " no local token usage records found"
+	}
+	parts := []string{
+		output.Count(len(report.Groups), "group", "groups"),
+		humanizeCount(report.Total.Tokens.Total()) + " tokens",
+		formatCurrency(report.Total.CostUSD, true, false) + " api equiv",
+	}
+	return style.Faint(strings.Join(parts, style.Sep()))
 }
 
 func historyRows(report ai.HistoryReport, opts HistoryPrintOptions) ([]string, [][]string) {
@@ -58,7 +113,7 @@ func historyRows(report ai.HistoryReport, opts HistoryPrintOptions) ([]string, [
 	row = append(row, tokenCells(report.Total.Tokens, showCacheWrite, showReasoning, opts.ShowTotalTokens)...)
 	row = append(row, "100.0%", formatCurrency(report.Total.CostUSD, true, false))
 	rows = append(rows, row)
-	alignNumericColumns(rows, headers)
+	alignDecimalColumns(rows, headers)
 	return headers, rows
 }
 
@@ -67,18 +122,17 @@ func shouldUseAdaptiveCurrency(report ai.HistoryReport) bool {
 }
 
 func groupCells(g ai.UsageGroup, groupBy string) []string {
-	accent := providerAccent(g.Provider)
 	switch groupBy {
 	case "provider":
-		return []string{accent.Sprint(g.Provider)}
+		return []string{g.Provider}
 	case "model":
-		return []string{accent.Sprint(g.Model)}
+		return []string{g.Model}
 	case "date":
 		return []string{g.Date}
 	case "session,model":
-		return []string{accent.Sprint(g.Provider), shortSessionID(g.SessionID), accent.Sprint(g.Model)}
+		return []string{g.Provider, shortSessionID(g.SessionID), g.Model}
 	default:
-		return []string{accent.Sprint(g.Provider + "/" + g.Model)}
+		return []string{g.Provider + "/" + g.Model}
 	}
 }
 
@@ -114,28 +168,24 @@ func zeroDash(v int64) string {
 	return humanizeCount(v)
 }
 
-func alignNumericColumns(rows [][]string, headers []string) {
+// alignDecimalColumns lines up decimal points in columns that can mix
+// precisions (adaptive currency); the grid right-aligns everything else.
+func alignDecimalColumns(rows [][]string, headers []string) {
 	for col, header := range headers {
-		switch header {
-		case "share", "api equiv":
-			values := make([]string, len(rows))
-			for i := range rows {
-				values[i] = rows[i][col]
-			}
-			aligned := alignDecimal(values)
-			for i := range rows {
-				rows[i][col] = aligned[i]
-			}
-		case "input", "cache read", "cache write", "output", "reasoning", "total":
-			width := 0
-			for _, row := range rows {
-				if len(row[col]) > width {
-					width = len(row[col])
-				}
-			}
-			for i := range rows {
-				rows[i][col] = fmt.Sprintf("%*s", width, rows[i][col])
-			}
+		if header != "share" && header != "api equiv" {
+			continue
+		}
+		values := make([]string, len(rows))
+		for i := range rows {
+			values[i] = rows[i][col]
+		}
+		aligned := alignDecimal(values)
+		width := 0
+		for _, v := range aligned {
+			width = max(width, len(v))
+		}
+		for i := range rows {
+			rows[i][col] = fmt.Sprintf("%-*s", width, aligned[i])
 		}
 	}
 }

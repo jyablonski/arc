@@ -61,6 +61,9 @@ type Config struct {
 	Providers []Provider
 	DryRun    bool
 	Force     bool
+	// Log receives the step lines a run reports as it works. Nil means the
+	// stdout stream; a caller whose stdout carries JSON passes stderr.
+	Log *output.Stream
 }
 
 type Manager struct {
@@ -68,6 +71,7 @@ type Manager struct {
 	providers []Provider
 	dryRun    bool
 	force     bool
+	log       *output.Stream
 }
 
 func New(c Config) *Manager {
@@ -77,17 +81,26 @@ func New(c Config) *Manager {
 	if c.Providers == nil {
 		c.Providers = DefaultProviders(c.Paths)
 	}
-	return &Manager{paths: c.Paths, providers: c.Providers, dryRun: c.DryRun, force: c.Force}
+	if c.Log == nil {
+		c.Log = output.Live()
+	}
+	return &Manager{paths: c.Paths, providers: c.Providers, dryRun: c.DryRun, force: c.Force, log: c.Log}
 }
 
 func (m *Manager) Providers() []Provider { return m.providers }
 
 func (m *Manager) announce(format string, args ...any) {
+	// Paths read as ~/… like every other screen.
+	for i, arg := range args {
+		if s, ok := arg.(string); ok {
+			args[i] = output.TildePath(s)
+		}
+	}
 	msg := fmt.Sprintf(format, args...)
 	if m.dryRun {
-		output.Info("would " + msg)
+		m.log.Info("would " + msg)
 	} else {
-		output.Info(msg)
+		m.log.Info(msg)
 	}
 }
 
@@ -153,7 +166,7 @@ func (m *Manager) List() (ListResult, error) {
 	for _, p := range m.providers {
 		cur, err := p.Read()
 		if err != nil {
-			output.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
+			m.log.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
 			cur = map[string]Server{}
 		}
 		existing[p.Name()] = cur
@@ -256,7 +269,7 @@ func (m *Manager) syncFile(f File) (SyncResult, error) {
 		existing, err := p.Read()
 		if err != nil {
 			pr.Error = err.Error()
-			output.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
+			m.log.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
 			res.Providers = append(res.Providers, pr)
 			continue
 		}
@@ -309,8 +322,8 @@ func (m *Manager) syncFile(f File) (SyncResult, error) {
 
 		if !m.dryRun {
 			if err := p.Write(desired, owned); err != nil {
+				// Reported once, by the caller, from the result.
 				pr.Error = err.Error()
-				output.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
 				res.Providers = append(res.Providers, pr)
 				continue
 			}
@@ -405,7 +418,7 @@ func (m *Manager) Import() (ImportResult, error) {
 	for _, p := range m.providers {
 		existing, err := p.Read()
 		if err != nil {
-			output.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
+			m.log.Warning(fmt.Sprintf("%s: %v", p.Name(), err))
 			continue
 		}
 		for _, name := range SortedNames(existing) {

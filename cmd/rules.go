@@ -26,15 +26,17 @@ var rulesSyncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Symlink ~/ai/AGENTS.md into each provider's rules file",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := skills.New(skills.Config{DryRun: rulesDryRun})
+		m := skills.New(skills.Config{DryRun: rulesDryRun, Log: stepLog(cmd)})
+		output.Title("arc rules sync", dryRunMeta(rulesDryRun))
 		conflicts, err := m.SyncRules()
 		if err != nil {
 			return err
 		}
 		if conflicts > 0 {
+			output.Summary(output.GlyphWarn, output.Count(conflicts, "conflict", "conflicts"))
 			return fmt.Errorf("%d rules-file conflict(s)", conflicts)
 		}
-		output.Success("rules synced")
+		output.Summary(output.GlyphOK, tense(rulesDryRun, "rules synced", "dry run complete"))
 		return nil
 	},
 }
@@ -43,7 +45,7 @@ var rulesStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show rules-file symlink state per provider",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		m := skills.New(skills.Config{})
+		m := skills.New(skills.Config{Log: stepLog(cmd)})
 		res := m.StatusRules()
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		if jsonOut {
@@ -51,13 +53,34 @@ var rulesStatusCmd = &cobra.Command{
 			enc.SetIndent("", "  ")
 			return enc.Encode(res)
 		}
-		output.Header(fmt.Sprintf("Canonical: %s", res.Canonical))
-		headers := []string{"PROVIDER", "TARGET", "STATUS"}
-		rows := make([][]string, 0, len(res.Providers))
+		style := output.StyleFor(os.Stdout)
+		sc := &output.Screen{W: os.Stdout, Style: style, Title: "arc rules status", Meta: output.TildePath(res.Canonical)}
+		grid := output.Grid{Columns: []output.Column{
+			{Align: output.AlignCenter},
+			{Header: "provider"},
+			{Header: "status"},
+			{Header: "target", Flex: true},
+		}}
+		drift := 0
 		for _, p := range res.Providers {
-			rows = append(rows, []string{p.Provider, p.Target, string(p.Status)})
+			glyph := output.GlyphOK
+			switch p.Status {
+			case skills.StatusOK:
+			case skills.StatusMissing:
+				glyph = output.GlyphInfo
+				drift++
+			default:
+				glyph = output.GlyphWarn
+				drift++
+			}
+			grid.Rows = append(grid.Rows, []string{style.Glyph(glyph), p.Provider, string(p.Status), output.TildePath(p.Target)})
 		}
-		output.Table(headers, rows)
+		sc.Grid(grid)
+		if drift > 0 {
+			sc.Flush(style.Glyph(output.GlyphWarn) + " " + output.Count(drift, "provider", "providers") + " out of sync" + style.Sep() + style.Faint("arc rules sync"))
+			return nil
+		}
+		sc.Flush(style.Glyph(output.GlyphOK) + " " + output.Count(len(res.Providers), "provider", "providers") + " in sync")
 		return nil
 	},
 }

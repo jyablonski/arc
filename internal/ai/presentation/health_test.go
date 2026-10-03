@@ -1,6 +1,7 @@
 package presentation
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -29,6 +30,15 @@ func TestHealthSection(t *testing.T) {
 	}
 }
 
+func renderHealth(t *testing.T, report ai.HealthReport) string {
+	t.Helper()
+	t.Setenv("ARC_ASCII", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	var buf bytes.Buffer
+	PrintHealth(&buf, report)
+	return buf.String()
+}
+
 func TestPrintHealth_allOK_ordersProvidersAndHidesHints(t *testing.T) {
 	// Deliberately out of order; the printer must sort claude → codex → cursor → local.
 	report := ai.HealthReport{Checks: []ai.HealthCheck{
@@ -38,9 +48,9 @@ func TestPrintHealth_allOK_ordersProvidersAndHidesHints(t *testing.T) {
 		{Category: "auth", Name: "claude", Status: ai.HealthOK, Detail: "claude token ok"},
 	}}
 
-	out := captureStdout(t, func() { PrintHealth(report) })
+	out := renderHealth(t, report)
 
-	require.Contains(t, out, "status")
+	require.True(t, strings.HasPrefix(out, "arc ai health"))
 	require.Contains(t, out, "provider")
 	// row ordering: claude before codex before cursor before local
 	require.Less(t, strings.Index(out, "claude token ok"), strings.Index(out, "codex token ok"))
@@ -49,7 +59,8 @@ func TestPrintHealth_allOK_ordersProvidersAndHidesHints(t *testing.T) {
 	// no failures → no hint footer, even though an OK check carries a hint
 	require.NotContains(t, out, "hint-should-not-render")
 	require.NotContains(t, out, "✗")
-	require.NotContains(t, out, "!")
+	require.NotContains(t, out, "⚠")
+	require.Contains(t, out, "✓ all 4 checks passed")
 }
 
 func TestPrintHealth_brokenChecks_showGlyphsDetailsAndHints(t *testing.T) {
@@ -59,27 +70,27 @@ func TestPrintHealth_brokenChecks_showGlyphsDetailsAndHints(t *testing.T) {
 		{Category: "config", Name: "skills", Status: ai.HealthWarn, Detail: "2 skill link(s) dangling", Hint: "run 'arc skills sync'"},
 	}}
 
-	out := captureStdout(t, func() { PrintHealth(report) })
+	out := renderHealth(t, report)
 
-	// status glyphs (color is disabled in captureStdout, so these are literal)
-	require.Contains(t, out, "✓")
-	require.Contains(t, out, "✗")
-	require.Contains(t, out, "!")
+	require.Contains(t, out, "✓  claude    auth    token valid for 5h")
+	require.Contains(t, out, "✗  codex     auth    no access token in auth.json")
+	require.Contains(t, out, "⚠  local     skills  2 skill link(s) dangling")
 
 	// details render in the table
 	require.Contains(t, out, "no access token in auth.json")
 	require.Contains(t, out, "2 skill link(s) dangling")
 
 	// hint footnotes appear only for the non-OK checks, keyed by provider/check
-	require.Contains(t, out, "codex/auth: run 'codex login'")
-	require.Contains(t, out, "local/skills: run 'arc skills sync'")
+	require.Contains(t, out, "✗ codex/auth    run 'codex login'")
+	require.Contains(t, out, "⚠ local/skills  run 'arc skills sync'")
 	require.NotContains(t, out, "ok-hint-hidden")
 
 	// the hint footer comes after the table rows
-	require.Less(t, strings.Index(out, "no access token in auth.json"), strings.Index(out, "codex/auth: run 'codex login'"))
+	require.Less(t, strings.Index(out, "no access token in auth.json"), strings.Index(out, "✗ codex/auth"))
+	require.Contains(t, out, "✗ 1 failed · 1 warning · 3 checks")
 }
 
 func TestPrintHealth_empty(t *testing.T) {
-	out := captureStdout(t, func() { PrintHealth(ai.HealthReport{}) })
+	out := renderHealth(t, ai.HealthReport{})
 	require.Contains(t, out, "no health checks ran")
 }

@@ -34,33 +34,39 @@ leaves the machine. Set ` + stats.NoTrackEnvVar + `=1 to disable tracking.`,
 			return enc.Encode(report)
 		}
 
+		style := output.StyleFor(os.Stdout)
+		sc := &output.Screen{W: os.Stdout, Style: style, Title: "arc stats", Meta: output.Timestamp(time.Now())}
 		if report.Total == 0 {
-			output.Info("no invocations recorded yet")
+			sc.Flush(style.Glyph(output.GlyphInfo) + " no invocations recorded yet")
 			return nil
 		}
 
-		output.Header(fmt.Sprintf("Command Usage (%d invocations)", report.Total))
-		rows := make([][]string, 0, len(report.Commands))
+		grid := output.Grid{Columns: []output.Column{
+			{Header: "command"},
+			{Header: "count", Align: output.AlignRight},
+			{Header: "failures", Align: output.AlignRight},
+			{Header: "last used"},
+			{Header: "total time", Align: output.AlignRight},
+		}}
+		failures := 0
 		for _, cs := range report.Commands {
-			rows = append(rows, []string{
+			failures += cs.Failures
+			grid.Rows = append(grid.Rows, []string{
 				cs.Command,
 				fmt.Sprintf("%d", cs.Count),
 				fmt.Sprintf("%d", cs.Failures),
-				cs.LastUsed.Local().Format("2006-01-02 15:04"),
-				formatTotalDuration(cs.TotalMS),
+				output.Timestamp(cs.LastUsed.Local()),
+				output.Duration(time.Duration(cs.TotalMS) * time.Millisecond),
 			})
 		}
-		output.Table([]string{"COMMAND", "COUNT", "FAILURES", "LAST USED", "TOTAL TIME"}, rows)
+		sc.Grid(grid)
+		sc.Flush(style.Faint(strings.Join([]string{
+			output.Count(len(report.Commands), "command", "commands"),
+			output.Count(report.Total, "invocation", "invocations"),
+			output.Count(failures, "failure", "failures"),
+		}, style.Sep())))
 		return nil
 	},
-}
-
-func formatTotalDuration(ms int64) string {
-	d := time.Duration(ms) * time.Millisecond
-	if d >= time.Second {
-		d = d.Round(time.Second)
-	}
-	return d.String()
 }
 
 // recordInvocation appends the executed command to the local stats log. It is
