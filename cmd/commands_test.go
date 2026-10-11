@@ -24,6 +24,7 @@ var expectedCommands = []string{
 	"git cleanup",
 	"incident [title]",
 	"info",
+	"install <package>...",
 	"installed",
 	"packages",
 	"parts",

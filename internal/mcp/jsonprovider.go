@@ -18,14 +18,10 @@ var bearerEnvRe = regexp.MustCompile(`^\s*[Bb]earer\s+\{env:([A-Za-z_][A-Za-z0-9
 // hold unrelated keys. Merging goes through jsonObject so those keys — and
 // their order — survive untouched.
 type jsonDialect struct {
-	name      string
 	path      string
 	key       string
 	envSyntax jsonEnvSyntax
 }
-
-func (d *jsonDialect) Name() string       { return d.name }
-func (d *jsonDialect) ConfigPath() string { return d.path }
 
 type jsonEnvSyntax int
 
@@ -245,7 +241,7 @@ func translateJSONServerRefs(s Server, syntax jsonEnvSyntax, outbound bool) Serv
 type ClaudeProvider struct{ Path string }
 
 func (p *ClaudeProvider) dialect() *jsonDialect {
-	return &jsonDialect{name: "claude", path: p.Path, key: "mcpServers", envSyntax: jsonEnvClaude}
+	return &jsonDialect{path: p.Path, key: "mcpServers", envSyntax: jsonEnvClaude}
 }
 
 func (p *ClaudeProvider) Name() string                      { return "claude" }
@@ -262,7 +258,7 @@ func (p *ClaudeProvider) Write(servers map[string]Server, owned []string) error 
 type CursorProvider struct{ Path string }
 
 func (p *CursorProvider) dialect() *jsonDialect {
-	return &jsonDialect{name: "cursor", path: p.Path, key: "mcpServers", envSyntax: jsonEnvCursor}
+	return &jsonDialect{path: p.Path, key: "mcpServers", envSyntax: jsonEnvCursor}
 }
 
 func (p *CursorProvider) Name() string                      { return "cursor" }

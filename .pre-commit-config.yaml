@@ -56,7 +56,7 @@ repos:
       # Regenerates internal/*_moq.go from //go:generate go tool moq (see Makefile mocks)
       - id: go-generate-moq
         name: go generate (moq)
-        language: system
+        language: golang
         entry: bash -c 'go generate ./...'
         pass_filenames: false
         files: ^(internal/.*\.go|go\.mod|go\.sum)$
@@ -76,7 +76,6 @@ repos:
         language: golang
         additional_dependencies:
           - golang.org/x/tools/cmd/deadcode@v0.45.0
-        entry: deadcode
-        args: [-test, ./...]
+        entry: make deadcode
         pass_filenames: false
         types: [go]

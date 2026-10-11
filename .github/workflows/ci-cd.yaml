@@ -152,7 +152,7 @@ jobs:
         run: golangci-lint run --timeout=5m ./...
 
       - name: Run deadcode
-        run: deadcode -test ./...
+        run: make deadcode
 
   release:
     name: Release Pipeline
