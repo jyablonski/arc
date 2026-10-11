@@ -176,6 +176,21 @@ func TestOutputGrammar_everyCommandSharesOneFrame(t *testing.T) {
 			contains: []string{"✓ package cache cleaned", "✓ removed 2 update logs (2.0 KiB)"},
 		},
 		{
+			name:  "install",
+			title: "arc install",
+			setup: func(t *testing.T) (*cobra.Command, []string) {
+				mgr := &pkgmgr.ManagerMock{InstallFunc: func(pkgmgr.InstallOptions) error {
+					output.Info("installing from pacman repositories: ripgrep")
+					return nil
+				}}
+				t.Cleanup(setAppForTest(&App{Platform: platform.Linux, PkgMgr: mgr}))
+				resetInstallFlags(t)
+				return installCmd, []string{"ripgrep"}
+			},
+			closing:  "✓ install complete",
+			contains: []string{"· installing from pacman repositories: ripgrep"},
+		},
+		{
 			name:  "setup",
 			title: "arc setup",
 			setup: func(t *testing.T) (*cobra.Command, []string) {

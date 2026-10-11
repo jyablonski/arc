@@ -20,6 +20,9 @@ var _ Manager = &ManagerMock{}
 //			CleanFunc: func(opts CleanOptions) error {
 //				panic("mock out the Clean method")
 //			},
+//			InstallFunc: func(opts InstallOptions) error {
+//				panic("mock out the Install method")
+//			},
 //			InstalledFunc: func(opts InstalledOptions) error {
 //				panic("mock out the Installed method")
 //			},
@@ -39,6 +42,9 @@ type ManagerMock struct {
 	// CleanFunc mocks the Clean method.
 	CleanFunc func(opts CleanOptions) error
 
+	// InstallFunc mocks the Install method.
+	InstallFunc func(opts InstallOptions) error
+
 	// InstalledFunc mocks the Installed method.
 	InstalledFunc func(opts InstalledOptions) error
 
@@ -54,6 +60,11 @@ type ManagerMock struct {
 		Clean []struct {
 			// Opts is the opts argument value.
 			Opts CleanOptions
+		}
+		// Install holds details about calls to the Install method.
+		Install []struct {
+			// Opts is the opts argument value.
+			Opts InstallOptions
 		}
 		// Installed holds details about calls to the Installed method.
 		Installed []struct {
@@ -72,6 +83,7 @@ type ManagerMock struct {
 		}
 	}
 	lockClean        sync.RWMutex
+	lockInstall      sync.RWMutex
 	lockInstalled    sync.RWMutex
 	lockPackages     sync.RWMutex
 	lockUpdateSystem sync.RWMutex
@@ -106,6 +118,38 @@ func (mock *ManagerMock) CleanCalls() []struct {
 	mock.lockClean.RLock()
 	calls = mock.calls.Clean
 	mock.lockClean.RUnlock()
+	return calls
+}
+
+// Install calls InstallFunc.
+func (mock *ManagerMock) Install(opts InstallOptions) error {
+	if mock.InstallFunc == nil {
+		panic("ManagerMock.InstallFunc: method is nil but Manager.Install was just called")
+	}
+	callInfo := struct {
+		Opts InstallOptions
+	}{
+		Opts: opts,
+	}
+	mock.lockInstall.Lock()
+	mock.calls.Install = append(mock.calls.Install, callInfo)
+	mock.lockInstall.Unlock()
+	return mock.InstallFunc(opts)
+}
+
+// InstallCalls gets all the calls that were made to Install.
+// Check the length with:
+//
+//	len(mockedManager.InstallCalls())
+func (mock *ManagerMock) InstallCalls() []struct {
+	Opts InstallOptions
+} {
+	var calls []struct {
+		Opts InstallOptions
+	}
+	mock.lockInstall.RLock()
+	calls = mock.calls.Install
+	mock.lockInstall.RUnlock()
 	return calls
 }
 

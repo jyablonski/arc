@@ -2,6 +2,9 @@ package pkgmgr
 
 import (
 	"errors"
+	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/jyablonski/arc/internal/platform"
 )
@@ -33,9 +36,38 @@ type PackageOptions struct {
 	JSON bool
 }
 
+type InstallOptions struct {
+	Packages []string
+	AUR      bool
+	Cask     bool
+	Formula  bool
+}
+
+func (opts InstallOptions) validate() error {
+	if len(opts.Packages) == 0 {
+		return fmt.Errorf("at least one package is required")
+	}
+	for _, name := range opts.Packages {
+		if name == "" || strings.HasPrefix(name, "-") || strings.ContainsFunc(name, unicode.IsSpace) {
+			return fmt.Errorf("invalid package name %q", name)
+		}
+	}
+	selected := 0
+	for _, enabled := range []bool{opts.AUR, opts.Cask, opts.Formula} {
+		if enabled {
+			selected++
+		}
+	}
+	if selected > 1 {
+		return fmt.Errorf("only one of --aur, --cask, or --formula may be used")
+	}
+	return nil
+}
+
 //go:generate go tool moq -rm -out manager_moq.go . Manager
 type Manager interface {
 	UpdateSystem(opts UpdateOptions) error
+	Install(opts InstallOptions) error
 	Clean(opts CleanOptions) error
 	Installed(opts InstalledOptions) error
 	Packages(opts PackageOptions) error

@@ -55,6 +55,35 @@ func (darwinManager) UpdateSystem(opts UpdateOptions) error {
 	return nil
 }
 
+func (darwinManager) Install(opts InstallOptions) error {
+	if err := opts.validate(); err != nil {
+		return err
+	}
+	if opts.AUR {
+		return arcerrs.ErrAURLinuxOnly
+	}
+	if !run.CommandExists("brew") {
+		return shell.NewErrToolNotAvailable("brew")
+	}
+
+	args := []string{"install"}
+	source := "Homebrew"
+	if opts.Cask {
+		args = append(args, "--cask")
+		source = "Homebrew casks"
+	}
+	if opts.Formula {
+		args = append(args, "--formula")
+		source = "Homebrew formulae"
+	}
+	args = append(args, opts.Packages...)
+	output.Info("installing from " + source + ": " + strings.Join(opts.Packages, ", "))
+	if err := run.RunInteractive("brew", args...); err != nil {
+		return fmt.Errorf("brew install failed: %w", err)
+	}
+	return nil
+}
+
 func (darwinManager) Clean(opts CleanOptions) error {
 	if err := brew.CheckAvailable(); err != nil {
 		return err

@@ -1,4 +1,4 @@
-.PHONY: build install clean test test-ci coverage coverage-full coverage-app coverage-html fmt lint help release mocks tidy deps
+.PHONY: build install clean test test-ci coverage coverage-full coverage-app coverage-html fmt lint deadcode help release mocks tidy deps
 
 # Binary name
 BINARY_NAME=arc
@@ -106,6 +106,15 @@ mocks: ## Regenerate moq mocks (uses `tool github.com/matryer/moq` from go.mod)
 lint: ## Run the pinned golangci-lint version
 	@echo "Running linter..."
 	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m ./...
+
+# deadcode exits successfully even when it reports unreachable functions.
+deadcode: ## Fail on unreachable Go functions
+	@set -e; \
+	findings="$$(deadcode -test ./...)"; \
+	if [ -n "$$findings" ]; then \
+		printf '%s\n' "$$findings"; \
+		exit 1; \
+	fi
 
 tidy: ## Tidy Go module dependencies
 	@echo "Tidying Go module dependencies..."

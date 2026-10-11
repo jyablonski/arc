@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/output"
+	"github.com/jyablonski/arc/internal/shell"
 	"github.com/jyablonski/arc/internal/sysupdate"
 )
 
@@ -35,6 +37,40 @@ func (linuxManager) UpdateSystem(opts UpdateOptions) error {
 		Verbose:   opts.Verbose,
 		ShowDiff:  opts.ShowDiff,
 	})
+}
+
+func (m linuxManager) Install(opts InstallOptions) error {
+	if err := opts.validate(); err != nil {
+		return err
+	}
+	if opts.Cask {
+		return arcerrs.ErrCaskDarwinOnly
+	}
+	if opts.Formula {
+		return arcerrs.ErrFormulaDarwinOnly
+	}
+	if err := m.pac.CheckPacmanAvailable(); err != nil {
+		return err
+	}
+
+	if opts.AUR {
+		if !run.CommandExists("yay") {
+			return shell.NewErrToolNotAvailable("yay")
+		}
+		output.Info("installing from the AUR: " + strings.Join(opts.Packages, ", "))
+		args := append([]string{"-S", "--aur", "--needed"}, opts.Packages...)
+		if err := run.RunInteractive("yay", args...); err != nil {
+			return fmt.Errorf("yay install failed: %w", err)
+		}
+		return nil
+	}
+
+	output.Info("installing from pacman repositories: " + strings.Join(opts.Packages, ", "))
+	args := append([]string{"pacman", "-S", "--needed"}, opts.Packages...)
+	if err := run.RunInteractive("sudo", args...); err != nil {
+		return fmt.Errorf("pacman install failed: %w", err)
+	}
+	return nil
 }
 
 func (m linuxManager) Clean(opts CleanOptions) error {

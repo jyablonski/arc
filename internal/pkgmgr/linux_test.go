@@ -3,9 +3,11 @@ package pkgmgr
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
+	"github.com/jyablonski/arc/internal/arcerrs"
 	"github.com/jyablonski/arc/internal/boundary"
 	"github.com/jyablonski/arc/internal/pacman"
 	"github.com/jyablonski/arc/internal/shell"
@@ -39,6 +41,79 @@ func noSudo(t *testing.T) *boundary.ShellRunnerMock {
 			t.Fatalf("unexpected RunSudo: %s %v", name, args)
 			return "", nil
 		},
+	}
+}
+
+func TestLinuxInstall_selectedSource(t *testing.T) {
+	for _, aur := range []bool{false, true} {
+		t.Run(fmt.Sprintf("aur=%t", aur), func(t *testing.T) {
+			pac := &pacmanOpsMock{CheckPacmanAvailableFunc: func() error { return nil }}
+			mock := &boundary.ShellRunnerMock{
+				CommandExistsFunc:  func(name string) bool { return name == "yay" },
+				RunInteractiveFunc: func(string, ...string) error { return nil },
+			}
+			setRunner(t, mock)
+			require.NoError(t, linuxManager{pac: pac}.Install(InstallOptions{Packages: []string{"first", "second"}, AUR: aur}))
+			calls := mock.RunInteractiveCalls()
+			require.Len(t, calls, 1)
+			if aur {
+				assert.Equal(t, "yay", calls[0].Name)
+				assert.Equal(t, []string{"-S", "--aur", "--needed", "first", "second"}, calls[0].Args)
+			} else {
+				assert.Equal(t, "sudo", calls[0].Name)
+				assert.Equal(t, []string{"pacman", "-S", "--needed", "first", "second"}, calls[0].Args)
+				require.Empty(t, mock.CommandExistsCalls(), "repository installs must not probe for an AUR helper")
+			}
+		})
+	}
+}
+
+func TestLinuxInstall_missingTools(t *testing.T) {
+	for _, tool := range []string{"pacman", "yay"} {
+		t.Run(tool, func(t *testing.T) {
+			pac := &pacmanOpsMock{CheckPacmanAvailableFunc: func() error {
+				if tool == "pacman" {
+					return shell.NewErrToolNotAvailable("pacman")
+				}
+				return nil
+			}}
+			mock := &boundary.ShellRunnerMock{CommandExistsFunc: func(string) bool { return false }}
+			setRunner(t, mock)
+			err := linuxManager{pac: pac}.Install(InstallOptions{Packages: []string{"x"}, AUR: true})
+			var toolErr *shell.ErrToolNotAvailable
+			require.ErrorAs(t, err, &toolErr)
+			require.Equal(t, tool, toolErr.Tool)
+			require.Empty(t, mock.RunInteractiveCalls())
+		})
+	}
+}
+
+func TestLinuxInstall_failureDoesNotRetryOrSwitchSource(t *testing.T) {
+	for _, aur := range []bool{false, true} {
+		t.Run(fmt.Sprintf("aur=%t", aur), func(t *testing.T) {
+			want := errors.New("target not found")
+			pac := &pacmanOpsMock{CheckPacmanAvailableFunc: func() error { return nil }}
+			mock := &boundary.ShellRunnerMock{
+				CommandExistsFunc:  func(string) bool { return true },
+				RunInteractiveFunc: func(string, ...string) error { return want },
+			}
+			setRunner(t, mock)
+			err := linuxManager{pac: pac}.Install(InstallOptions{Packages: []string{"missing-package"}, AUR: aur})
+			require.ErrorIs(t, err, want)
+			require.Len(t, mock.RunInteractiveCalls(), 1)
+		})
+	}
+}
+
+func TestLinuxInstall_rejectsMacOSTypesBeforeProbing(t *testing.T) {
+	for _, tt := range []struct {
+		opts InstallOptions
+		want error
+	}{
+		{InstallOptions{Packages: []string{"x"}, Cask: true}, arcerrs.ErrCaskDarwinOnly},
+		{InstallOptions{Packages: []string{"x"}, Formula: true}, arcerrs.ErrFormulaDarwinOnly},
+	} {
+		require.ErrorIs(t, linuxManager{}.Install(tt.opts), tt.want)
 	}
 }
 

@@ -21,6 +21,14 @@ var (
 
 	ErrNoAURLinuxOnly = errors.New("--no-aur is only supported on Linux")
 
+	ErrAURLinuxOnly = errors.New("--aur is only supported on Linux")
+
+	ErrCaskDarwinOnly = errors.New("--cask is only supported on macOS")
+
+	ErrFormulaDarwinOnly = errors.New("--formula is only supported on macOS")
+
+	ErrInstallJSONUnsupported = errors.New("--json is not supported for interactive package installation")
+
 	ErrAssumeYesLinuxOnly = errors.New("--yes is only supported for system updates on Linux")
 
 	ErrUpdateLogLinuxOnly = errors.New("--log is only supported for system updates on Linux")
