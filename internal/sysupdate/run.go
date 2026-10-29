@@ -26,8 +26,7 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 	log := newMemoryRunLog()
 	// Acquire sudo before anything is drawn so the password prompt (in sudo's
 	// own wording) never lands inside a section.
-	authLogStart := log.command("sudo", "-v")
-	if err := d.RunLogged(log.Writer(), true, "sudo", "-v"); err != nil {
+	if authLogStart, err := refreshSudo(d, log); err != nil {
 		renderer := NewRenderer(d.Out, opts.Verbose)
 		return renderRunFailure(renderer, log, authLogStart, "sudo authentication failed", err)
 	}
@@ -134,8 +133,7 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 	}
 	if !opts.SkipCache {
 		cacheStarted := d.Now()
-		cacheAuthLogStart := log.command("sudo", "-v")
-		if err := d.RunLogged(log.Writer(), true, "sudo", "-v"); err != nil {
+		if cacheAuthLogStart, err := refreshSudo(d, log); err != nil {
 			renderer.Warning(fmt.Sprintf("package cache authentication failed: %v", err))
 			renderer.FailureTail(log.tailFrom(cacheAuthLogStart))
 		} else {
@@ -162,6 +160,16 @@ func RunWithDeps(deps Deps, opts Options) (runErr error) {
 		return promptReboot(renderer, reader, d.RunInteractive)
 	}
 	return nil
+}
+
+// refreshSudo renews (or re-prompts for) sudo credentials in the foreground.
+// Call it after any gate that waited on the user: sudo's credential cache
+// (5 minutes by default) can lapse during the wait, and the next sudo would
+// otherwise prompt underneath a progress line. It returns the log position for
+// failure tails.
+func refreshSudo(d Deps, log *runLog) (int64, error) {
+	start := log.command("sudo", "-v")
+	return start, d.RunLogged(log.Writer(), true, "sudo", "-v")
 }
 
 // runAURUpdate reviews pending AUR updates, asks once in arc's wording, and
@@ -206,6 +214,14 @@ func runAURUpdate(d Deps, renderer Renderer, log *runLog, reader *bufio.Reader, 
 		yayArgs = append(yayArgs, "--diffmenu", "--answerdiff", "All")
 	} else {
 		yayArgs = append(yayArgs, "--diffmenu=false")
+	}
+
+	// yay calls sudo itself once it has built; a credential that lapsed while
+	// the gate waited must be renewed here, before yay's output is proxied.
+	if authLogStart, err := refreshSudo(d, log); err != nil {
+		renderer.Warning(fmt.Sprintf("AUR authentication failed: %v", err))
+		renderer.FailureTail(log.tailFrom(authLogStart))
+		return "AUR skipped"
 	}
 
 	stdinR, stdinW, err := os.Pipe()
@@ -454,15 +470,21 @@ func printAURReview(renderer Renderer, result *aurreview.Result, ignored []ignor
 	}
 
 	// Diffs for build-logic changes expand by default; routine bumps stay
-	// behind "d" at the prompt or --diff.
-	expand := func(c aurreview.Change) bool { return showDiff || !c.Routine }
+	// behind "d" at the prompt or --diff. So does a package with no trusted
+	// snapshot: its "diff" is every file in full, which reads as noise. The
+	// static scan still covers those files.
+	expand := func(c aurreview.Change) bool { return showDiff || (!c.Routine && c.Baseline) }
 	shownDiffs := printAURDiffs(renderer, result, expand)
 
 	renderer.Blank()
-	attention := 0
-	for _, c := range changes {
-		if c.Attention {
-			attention++
+	changed, uncompared := 0, 0
+	for _, update := range result.Updates {
+		switch c, ok := result.Changes[packageBase(update)]; {
+		case !ok || c.Routine:
+		case c.Baseline:
+			changed++
+		default:
+			uncompared++
 		}
 	}
 	actionable := make([]aurreview.Finding, 0, len(result.Findings))
@@ -486,10 +508,17 @@ func printAURReview(renderer Renderer, result *aurreview.Result, ignored []ignor
 				renderer.Warning(line)
 			}
 		}
-	case attention > 0 && shownDiffs:
-		renderer.writeStatusHint(output.GlyphWarn, "review", fmt.Sprintf("%s changed build logic, diff above", output.Count(attention, "package", "packages")), hint)
-	case attention > 0:
-		renderer.writeStatusHint(output.GlyphWarn, "review", fmt.Sprintf("%s could not be compared", output.Count(attention, "package", "packages")), hint)
+	case changed > 0 || uncompared > 0:
+		if changed > 0 {
+			detail := fmt.Sprintf("%s changed build logic", output.Count(changed, "package", "packages"))
+			if shownDiffs {
+				detail += ", diff above"
+			}
+			renderer.writeStatusHint(output.GlyphWarn, "review", detail, hint)
+		}
+		if uncompared > 0 {
+			renderer.writeStatusHint(output.GlyphWarn, "review", fmt.Sprintf("%s could not be compared", output.Count(uncompared, "package", "packages")), hint)
+		}
 	default:
 		renderer.writeStatusHint(output.GlyphOK, "review", "no build logic changed", hint)
 	}

@@ -51,6 +51,9 @@ type tally struct {
 	ignored  int
 	warnings int
 	hidden   int
+	// labelWidth is the current section's label column once a plan widened
+	// it past the default for a long package name; 0 means the default.
+	labelWidth int
 }
 
 func (r Renderer) writer() io.Writer {
@@ -106,6 +109,9 @@ func (r Renderer) RunHeader(started time.Time) {
 // Section prints a section title with its summary right-aligned to the same
 // edge as the run header and every row timing.
 func (r Renderer) Section(title, summary string) {
+	if r.tally != nil {
+		r.tally.labelWidth = 0
+	}
 	_, _ = fmt.Fprintln(r.writer(), output.Justify(r.style().Bold(title), summary, r.width()))
 }
 
@@ -249,6 +255,10 @@ func (r Renderer) Plan(changes []PackageChange, held ...ignoredPackage) {
 	for _, h := range held {
 		nameWidth = max(nameWidth, visibleRunes(h.Name)+2)
 	}
+	// Result rows later in this section line up with the widened column.
+	if r.tally != nil {
+		r.tally.labelWidth = nameWidth
+	}
 	pad := func(name string) string { return name + strings.Repeat(" ", nameWidth-visibleRunes(name)) }
 	prefixes := make([]string, 0, len(changes)+len(held))
 	grid := output.Grid{Columns: []output.Column{{}, {}, {}}, NoHeader: true}
@@ -346,7 +356,7 @@ func (r Renderer) Footer(elapsed time.Duration, extra ...string) {
 // writeStatus renders "  G label  detail" with any duration right-aligned to
 // the frame edge shared with section summaries.
 func (r Renderer) writeStatus(g output.Glyph, label, detail string, duration time.Duration) {
-	left := "  " + r.style().Glyph(g) + " " + padLabel(label) + detail
+	left := "  " + r.style().Glyph(g) + " " + r.padLabel(label) + detail
 	if duration > 0 {
 		left = output.Justify(strings.TrimRight(left, " "), output.Duration(duration), r.width())
 	}
@@ -356,15 +366,19 @@ func (r Renderer) writeStatus(g output.Glyph, label, detail string, duration tim
 // writeStatusHint is writeStatus with a faint hint right-aligned where a
 // timing would go.
 func (r Renderer) writeStatusHint(g output.Glyph, label, detail, hint string) {
-	left := "  " + r.style().Glyph(g) + " " + padLabel(label) + detail
+	left := "  " + r.style().Glyph(g) + " " + r.padLabel(label) + detail
 	_, _ = fmt.Fprintln(r.writer(), output.Justify(left, hint, r.width()))
 }
 
-// padLabel pads to the shared label column, keeping a gutter after names that
-// overflow it.
-func padLabel(label string) string {
-	if n := visibleRunes(label); n < labelWidth {
-		return label + strings.Repeat(" ", labelWidth-n)
+// padLabel pads to the section's label column, keeping a gutter after names
+// that overflow it.
+func (r Renderer) padLabel(label string) string {
+	width := labelWidth
+	if r.tally != nil && r.tally.labelWidth > 0 {
+		width = r.tally.labelWidth
+	}
+	if n := visibleRunes(label); n < width {
+		return label + strings.Repeat(" ", width-n)
 	}
 	return label + "  "
 }

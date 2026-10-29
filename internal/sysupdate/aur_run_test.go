@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,6 +141,98 @@ func TestPrintAURReview_keepsSuspiciousFindings(t *testing.T) {
 	require.Contains(t, out.String(), "2 suspicious changes detected")
 	require.Contains(t, out.String(), "✗ foo: pipe-to-shell (PKGBUILD:10)")
 	require.Contains(t, out.String(), "⚠ foo: runtime network download (PKGBUILD:10)")
+}
+
+func TestPrintAURReview_collapsesDiffsWithoutATrustedSnapshot(t *testing.T) {
+	newFile := []aurreview.FileDiff{{Name: "PKGBUILD", Lines: []string{"@@ -1,0 +1,1 @@", "+pkgname=yay"}}}
+	result := &aurreview.Result{
+		Updates: []aurreview.Update{
+			{Name: "foo", PackageBase: "foo", InstalledVersion: "1", TargetVersion: "2"},
+			{Name: "yay", PackageBase: "yay", InstalledVersion: "1", TargetVersion: "2"},
+		},
+		Changes: map[string]aurreview.Change{
+			"foo": {Summary: "source + build()", Baseline: true, Files: []aurreview.FileDiff{{Name: "PKGBUILD", Lines: []string{"@@ -3 +3 @@", "-make", "+make all"}}}},
+			"yay": {Summary: "no trusted snapshot", Files: newFile},
+		},
+	}
+
+	var out bytes.Buffer
+	printAURReview(Renderer{Out: &out, Width: 76}, result, nil, time.Unix(0, 0), false)
+	require.Contains(t, out.String(), "diff · foo")
+	require.NotContains(t, out.String(), "diff · yay")
+	require.Contains(t, out.String(), "1 package changed build logic, diff above")
+	require.Contains(t, out.String(), "1 package could not be compared")
+
+	out.Reset()
+	printAURReview(Renderer{Out: &out, Width: 76}, result, nil, time.Unix(0, 0), true)
+	require.Contains(t, out.String(), "diff · yay", "--diff expands every package")
+}
+
+func TestRunWithDeps_refreshesSudoAfterEachGate(t *testing.T) {
+	deps := testDepsKernelStable(t)
+	deps.Stdin = stdinWith(t, "y\ny\n")
+	deps.RepoPlan = func() ([]PackageChange, error) {
+		return []PackageChange{{Name: "bar", FromVersion: "1", ToVersion: "2"}}, nil
+	}
+	deps.InstalledVersions = func() (map[string]string, error) {
+		return map[string]string{"archlinux-keyring": "1", "bar": "2"}, nil
+	}
+	deps.CheckYayAvailable = func() bool { return true }
+	deps.ForeignPackages = testForeignPackageUpgrade()
+	deps.ReviewAUR = func(context.Context, map[string]string) (*aurreview.Result, error) {
+		return testPendingAURResult(), nil
+	}
+	deps.CommitAUR = func(*aurreview.Result) error { return nil }
+	var calls []string
+	deps.RunLogged = func(_ io.Writer, visible bool, name string, args ...string) error {
+		call := strings.Join(append([]string{name}, args...), " ")
+		if call == "sudo -v" {
+			require.True(t, visible, "sudo must be able to prompt in the foreground")
+		}
+		calls = append(calls, call)
+		return nil
+	}
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error {
+		calls = append(calls, "yay")
+		return nil
+	}
+
+	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
+	pacman := slices.Index(calls, "sudo pacman -Su --noconfirm --noprogressbar --color never")
+	yay := slices.Index(calls, "yay")
+	require.Positive(t, pacman)
+	require.Positive(t, yay)
+	require.Equal(t, "sudo -v", calls[pacman-1], "credentials renewed after the repo gate")
+	require.Equal(t, "sudo -v", calls[yay-1], "credentials renewed after the AUR gate")
+}
+
+func TestRunWithDeps_aurSudoFailureSkipsYay(t *testing.T) {
+	deps := testDepsKernelStable(t)
+	var out bytes.Buffer
+	deps.Out = &out
+	deps.Stdin = stdinWith(t, "y\n")
+	deps.CheckYayAvailable = func() bool { return true }
+	deps.ForeignPackages = testForeignPackageUpgrade()
+	deps.ReviewAUR = func(context.Context, map[string]string) (*aurreview.Result, error) {
+		return testPendingAURResult(), nil
+	}
+	sudoCalls := 0
+	deps.RunLogged = func(_ io.Writer, _ bool, name string, args ...string) error {
+		if name == "sudo" && len(args) == 1 && args[0] == "-v" {
+			sudoCalls++
+			if sudoCalls > 1 {
+				return errors.New("incorrect password")
+			}
+		}
+		return nil
+	}
+	ranYay := false
+	deps.RunAUR = func(io.Writer, *os.File, string, ...string) error { ranYay = true; return nil }
+
+	require.NoError(t, RunWithDeps(deps, Options{SkipCache: true}))
+	require.False(t, ranYay)
+	require.Contains(t, out.String(), "AUR authentication failed")
+	require.Contains(t, out.String(), "AUR skipped")
 }
 
 func TestRunWithDeps_aurReviewCommitsOnYaySuccess(t *testing.T) {

@@ -448,7 +448,7 @@ var scanPatterns = []struct {
 	{regexp.MustCompile(`(?i)\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|fi)?sh\b`), High, "pipe-to-shell", false},
 	{regexp.MustCompile(`(?i)\b(ba|z|fi)?sh\s+<\(\s*(curl|wget)\b`), High, "download-to-shell process substitution", false},
 	{regexp.MustCompile(`(/dev/(tcp|udp)/|\bnc(at)?\b[^\n]*\s-e\b|\bsocat\b[^\n]*\bexec:)`), High, "reverse-shell primitive", false},
-	{regexp.MustCompile(`\b(sudo|doas)\b`), High, "privilege escalation command", false},
+	{privilegeRE, High, "privilege escalation command", false},
 	// Common payload-obfuscation and privilege tells.
 	{regexp.MustCompile(`\bbase64\s+(-d|--decode)\b`), Warn, "base64 decode", false},
 	{regexp.MustCompile(`\beval\b`), Warn, "eval", false},
@@ -463,6 +463,10 @@ var scanPatterns = []struct {
 	{regexp.MustCompile(`(?m)^\s*install\s*=`), Info, "declares an .install file", false},
 	{regexp.MustCompile(`\.hook\b`), Warn, "references a .hook file", false},
 }
+
+// privilegeRE only means something when executed, so a match inside a
+// dependency declaration (optdepends=('sudo: …')) is skipped.
+var privilegeRE = regexp.MustCompile(`\b(sudo|doas)\b`)
 
 // pinnedRE marks lockfile-pinned fetches (npm ci is lockfile-strict by design).
 var pinnedRE = regexp.MustCompile(`--locked\b|--frozen-lockfile\b|--immutable\b|--require-hashes\b|--offline\b|\bnpm ci\b`)
@@ -531,6 +535,7 @@ func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, ma
 		}
 
 		var skipLines []int
+		declLines := dependencyDeclLines(files[fname])
 		for i, line := range strings.Split(files[fname], "\n") {
 			// Comments are reminders, not behavior; skipping them kills the
 			// bulk of the SKIP/pattern false positives (see spotify's PKGBUILD).
@@ -544,7 +549,7 @@ func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, ma
 			var lineFindings []Finding
 			maxSeverity := Info
 			for _, p := range scanPatterns {
-				if !p.re.MatchString(line) {
+				if !p.re.MatchString(line) || (p.re == privilegeRE && declLines[i]) {
 					continue
 				}
 				sev, label := p.sev, p.label
@@ -602,6 +607,55 @@ func (r *Reviewer) scanPackage(ctx context.Context, info rpcInfo) ([]Finding, ma
 	}
 	return findings, files
 }
+
+// dependencyDeclLines returns the 0-based lines that sit inside a depends,
+// makedepends, checkdepends or optdepends array (arch suffixes included) and
+// hold only literals. Anything else on the line — an expansion, or a command
+// after the closing paren — leaves it out so it is still scanned, since
+// makepkg runs it when it sources the PKGBUILD.
+func dependencyDeclLines(content string) map[int]bool {
+	decl := map[int]bool{}
+	inArray := false
+	for i, line := range strings.Split(content, "\n") {
+		rest := line
+		if !inArray {
+			m := assignRE.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			name, _, _ := strings.Cut(m[1], "_")
+			if !depVars[name] {
+				continue
+			}
+			rest = strings.TrimSpace(line[len(m[0]):])
+			if !strings.HasPrefix(rest, "(") {
+				continue
+			}
+			rest = rest[1:]
+			inArray = true
+		}
+		unquoted := quotedLiteralRE.ReplaceAllString(rest, "")
+		if !inertDeclRE.MatchString(unquoted) {
+			// Escapes or anything else unrecognised can end the array where
+			// this parser would not; stop masking rather than guess.
+			inArray = false
+			continue
+		}
+		decl[i] = true
+		if strings.Contains(unquoted, ")") {
+			inArray = false
+		}
+	}
+	return decl
+}
+
+// quotedLiteralRE matches single-quoted strings and double-quoted strings
+// without expansions, the only forms dependencyDeclLines treats as inert.
+var quotedLiteralRE = regexp.MustCompile(`'[^']*'|"[^"$` + "`" + `]*"`)
+
+// inertDeclRE is what may remain of a declaration line once its quoted
+// literals are removed: bare package names and at most a closing paren.
+var inertDeclRE = regexp.MustCompile(`^[\w\s.+:=@/-]*(\)\s*)?$`)
 
 func isPGPKeyFile(name string) bool {
 	name = filepath.ToSlash(name)

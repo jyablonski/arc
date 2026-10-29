@@ -68,6 +68,10 @@ func runRepoUpdate(d Deps, renderer Renderer, log *runLog, reader *bufio.Reader,
 		plan = confirmed
 	}
 
+	if authLogStart, err := refreshSudo(d, log); err != nil {
+		return false, false, renderRunFailure(renderer, log, authLogStart, "sudo authentication failed", err)
+	}
+
 	started := d.Now()
 	args := []string{"pacman", "-Su", "--noconfirm", "--noprogressbar", "--color", "never"}
 	updateLogStart := log.command("sudo", args...)
