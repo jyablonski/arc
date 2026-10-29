@@ -512,6 +512,44 @@ func TestReview_privilegePersistenceAndDownloadSignalsFlagged(t *testing.T) {
 	require.True(t, findingFor(res.Findings, "foo", aurreview.Warn, "install/upgrade hook function"))
 }
 
+func TestReview_privilegeEscalationIgnoresDependencyDeclarations(t *testing.T) {
+	dir := t.TempDir()
+	meta := map[string]pkgMeta{
+		"foo": {version: "2.0", maintainer: new("alice"), lastModified: 1,
+			files: map[string]string{
+				"PKGBUILD": strings.Join([]string{
+					"pkgname=foo",                     // 1
+					"depends=(git sudo)",              // 2
+					"optdepends=(",                    // 3
+					"  'sudo: privilege elevation'",   // 4
+					"  \"doas: privilege elevation\"", // 5
+					")",                               // 6
+					"optdepends_x86_64=('sudo')",      // 7
+					"makedepends=('sudo'); sudo id",   // 8: runs when sourced
+					"checkdepends=(\"$(sudo id)\")",   // 9: expansion runs too
+					"package() {",                     // 10
+					"  sudo install -Dm755 foo /usr/bin/foo",
+					"}",
+					`depends=(a\' ) ; sudo id #'`, // 13: escaped quote ends the array early
+					"  sudo id",                   // 14: runs, not a dependency entry
+					")",
+				}, "\n"),
+			},
+		},
+	}
+	rv := newReviewer(filepath.Join(dir, "state.json"), router(t, meta, nil))
+
+	res, err := rv.Review(context.Background(), map[string]string{"foo": "1.0"})
+	require.NoError(t, err)
+	var locations []string
+	for _, f := range res.Findings {
+		if strings.Contains(f.Message, "privilege escalation command") {
+			locations = append(locations, f.Location)
+		}
+	}
+	require.ElementsMatch(t, []string{"PKGBUILD:8", "PKGBUILD:9", "PKGBUILD:11", "PKGBUILD:13", "PKGBUILD:14"}, locations)
+}
+
 func TestReview_lockfilePinnedFetchDowngraded(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")

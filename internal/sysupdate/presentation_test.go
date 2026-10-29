@@ -97,3 +97,25 @@ func TestRenderer_longNameKeepsPlanColumns(t *testing.T) {
 	require.Equal(t, strings.Index(lines[0], "→"), strings.Index(lines[1], "→"))
 	require.Equal(t, strings.Index(lines[0], "pkgver"), strings.Index(lines[1], "pkgver"))
 }
+
+func TestRenderer_resultRowsFollowAWidenedPlanColumn(t *testing.T) {
+	var out bytes.Buffer
+	r := NewRenderer(&out, false)
+	r.Section("AUR", "")
+	r.Plan([]PackageChange{
+		{Name: "visual-studio-code-bin", FromVersion: "1.0-1", ToVersion: "1.1-1"},
+		{Name: "yay", FromVersion: "13.0-1", ToVersion: "13.1-1"},
+	})
+	r.PackageResult(PackageChange{Name: "visual-studio-code-bin", FromVersion: "1.0-1", ToVersion: "1.1-1"}, time.Second)
+	r.PackageResult(PackageChange{Name: "yay", FromVersion: "13.0-1", ToVersion: "13.1-1"}, time.Second)
+	r.Section("NEXT", "")
+	r.Result("cache", "old archives cleaned", 0)
+
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	col := func(line, sub string) int { return visibleRunes(line[:strings.Index(line, sub)]) }
+	planCol := col(lines[1], "1.0-1")
+	require.Equal(t, planCol, col(lines[3], "1.1-1"))
+	require.Equal(t, planCol, col(lines[4], "13.1-1"))
+	// A new section starts back at the default column.
+	require.Equal(t, "  ✓ cache               old archives cleaned", lines[6])
+}
